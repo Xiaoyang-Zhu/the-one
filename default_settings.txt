@@ -21,7 +21,7 @@ Scenario.endTime = 43200
 btInterface.type = SimpleBroadcastInterface
 # Transmit speed of 2 Mbps = 250kBps
 btInterface.transmitSpeed = 250k
-btInterface.transmitRange = 10
+btInterface.transmitRange = 20
 
 # High speed, long range, interface for group 4
 highspeedInterface.type = SimpleBroadcastInterface
@@ -54,7 +54,7 @@ Scenario.nrofHostGroups = 4
 # Common settings for all groups
 Group.movementModel = ShortestPathMapBasedMovement
 #Group.router = EpidemicRouter
-Group.router = ProphetRouter
+Group.router = E3PRouter
 
 Group.bufferSize = 5M
 Group.waitTime = 0, 120
@@ -71,13 +71,12 @@ Group.nrofHosts = 9
 # group1 (players) specific settings
 Group1.groupID = a
 # 10-50 km/h
-Group1.speed = 2.7, 13.9
+#Group1.speed = 2.7, 13.9
 
 # group2 (players) specific settings
 Group2.groupID = b
-
 # 10-50 km/h
-Group2.speed = 2.7, 13.9
+#Group2.speed = 2.7, 13.9
 
 # group of wittness
 Group3.groupID = w
@@ -112,17 +111,8 @@ MovementModel.worldSize = 10020,8830
 MovementModel.warmup = 1000
 
 ## Map based movement -movement model specific settings
-MapBasedMovement.nrofMapFiles = 4
-
-#MapBasedMovement.mapFile1 = data/roads.wkt
-#MapBasedMovement.mapFile2 = data/main_roads.wkt
-#MapBasedMovement.mapFile3 = data/pedestrian_paths.wkt
-#MapBasedMovement.mapFile4 = data/shops.wkt
-
+MapBasedMovement.nrofMapFiles = 1
 MapBasedMovement.mapFile1 = data/map.osm.wkt
-MapBasedMovement.mapFile2 = data/map.osm.wkt
-MapBasedMovement.mapFile3 = data/map.osm.wkt
-MapBasedMovement.mapFile4 = data/map.osm.wkt
 
 
 ## Reports - all report names have to be valid report classes
@@ -139,6 +129,7 @@ Report.report2 = ConnectivityONEReport
 
 ## Default settings for some routers settings
 ProphetRouter.secondsInTimeUnit = 30
+E3PRouter.secondsInTimeUnit = 30
 SprayAndWaitRouter.nrofCopies = 6
 SprayAndWaitRouter.binaryMode = true
 
