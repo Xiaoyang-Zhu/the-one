@@ -53,8 +53,8 @@ Scenario.nrofHostGroups = 4
 
 # Common settings for all groups
 Group.movementModel = ShortestPathMapBasedMovement
-#Group.router = EpidemicRouter
-Group.router = E3PRouter
+Group.router = EpidemicRouter
+#Group.router = E3PRouter
 
 Group.bufferSize = 5M
 Group.waitTime = 0, 120
