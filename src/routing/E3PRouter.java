@@ -9,9 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import routing.util.RoutingInfo;
-
 import util.Tuple;
-
 import core.Connection;
 import core.DTNHost;
 import core.Message;
@@ -28,6 +26,8 @@ public class E3PRouter extends ActiveRouter {
 	public static final double P_INIT = 0.75;
 	/** delivery predictability transitivity scaling constant default value */
 	public static final double DEFAULT_BETA = 0.25;
+	/** the number of destination node default value */
+	public static final int DEFAULT_DESTINATION_NUM = 4;
 	/** delivery predictability aging constant */
 	public static final double GAMMA = 0.98;
 
@@ -44,14 +44,27 @@ public class E3PRouter extends ActiveRouter {
 	 * Default value for setting is {@link #DEFAULT_BETA}.
 	 */
 	public static final String BETA_S = "beta";
+	
+	/**
+	 * The number of destination node (DESTINATION_NUM) -setting id ({@value}).
+	 * Default value for setting is {@link #DEFAULT_DESTINATION_NUM}.
+	 */
+	public static final String DESTINATION_NUM = "destination_num";
+	
 
 	/** the value of nrof seconds in time unit -setting */
 	private int secondsInTimeUnit;
 	/** value of beta setting */
 	private double beta;
+	/** value of destination_num setting */
+	private int destination_num;
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
+	
+	/**public delivery predictabilities */
+	private Map<DTNHost, Double> pub_preds;
+
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
 
@@ -70,6 +83,14 @@ public class E3PRouter extends ActiveRouter {
 		else {
 			beta = DEFAULT_BETA;
 		}
+		
+		/*Add the number of destination nodes*/
+		if (E3PSettings.contains(DESTINATION_NUM)) {
+			destination_num = E3PSettings.getInt(DESTINATION_NUM);
+		}
+		else {
+			destination_num = DEFAULT_DESTINATION_NUM;
+		}
 
 		initPreds();
 	}
@@ -82,6 +103,7 @@ public class E3PRouter extends ActiveRouter {
 		super(r);
 		this.secondsInTimeUnit = r.secondsInTimeUnit;
 		this.beta = r.beta;
+		this.destination_num = r.destination_num;
 		initPreds();
 	}
 
@@ -90,6 +112,9 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private void initPreds() {
 		this.preds = new HashMap<DTNHost, Double>();
+		
+		/**Initiate the public delivery predictabilities */
+		this.pub_preds =new HashMap<DTNHost, Double>();
 	}
 
 	@Override
@@ -202,6 +227,100 @@ public class E3PRouter extends ActiveRouter {
 		tryOtherMessages();
 	}
 
+	
+	/**
+	 * Override the exchangeDeliverableMessages to deliver messages to many
+	 * destinations rather than only one.
+	 */
+	@Override
+	protected Connection exchangeDeliverableMessages() {
+		List<Connection> connections = getConnections();
+
+		if (connections.size() == 0) {
+			return null;
+		}
+
+		
+		
+		@SuppressWarnings(value = "unchecked")
+		Tuple<Message, Connection> t =
+			tryMessagesForConnected(sortByQueueMode(getMessagesForConnected()));
+
+		if (t != null) {
+			return t.getValue(); // started transfer
+		}
+
+		// didn't start transfer to any node -> ask messages from connected
+		for (Connection con : connections) {
+			if (con.getOtherNode(getHost()).requestDeliverableMessages(con)) {
+				return con;
+			}
+		}
+		
+		
+
+		return null;	
+	}
+	
+	
+	/**
+	 * Messages Encapsulation
+	 * @param m the message needed to be encapsulated to protect privacy of
+	 * source node and destination node
+	 * @return the encapsulated message
+	 */
+	
+	private Message messages_encapsulation(Message m) {
+		DTNHost orig_from = m.getFrom();
+		DTNHost orig_to = m.getTo();
+		
+		
+		String encrypt_node_str = encrypt_source_node(orig_from);
+		
+		List<DTNHost> dtnhost_destinations_list = 
+				gen_pseu_list_destination_node(orig_to);
+		String destination_list = dtnhost_destinations_list.toString();
+		new Message(orig_to, orig_to, destination_list, destination_num);
+		
+		Message encap_m = new Message(gen_pseu_dtnhost_id(orig_from), 
+				gen_pseu_dtnhost_id(orig_to), m.getId(),  m.getSize() + 
+				destination_list.length() + encrypt_node_str.length());
+		
+		encap_m.copyFrom(m);
+		
+
+		
+		return encap_m;
+		 
+	}
+	
+	private String encrypt_source_node(DTNHost from) {
+		String str_dtnhost = from.toString();
+		
+		/*
+		 * Add encryption code
+		 */		
+		
+		return str_dtnhost;
+	}
+	
+	private DTNHost gen_pseu_dtnhost_id(DTNHost host) {
+		return host;
+	}
+	
+	private List<DTNHost> gen_pseu_list_destination_node(DTNHost to) {
+		List<DTNHost> dtnhost_list =
+				new ArrayList<DTNHost>();
+		
+		for (int i = destination_num;i<1;i++) {
+			dtnhost_list.add(to);
+			
+		}
+		
+		return dtnhost_list;
+	} 
+	
+	
 	/**
 	 * Tries to send all other messages to all connected hosts ordered by
 	 * their delivery probability
