@@ -7,11 +7,13 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import routing.util.RoutingInfo;
 import util.Tuple;
 import core.Connection;
 import core.DTNHost;
+import core.DTNSim;
 import core.Message;
 import core.Settings;
 import core.SimClock;
@@ -212,6 +214,48 @@ public class E3PRouter extends ActiveRouter {
 		return this.preds;
 	}
 
+	
+	/**
+	 * Messages Encapsulation
+	 * @param m the message needed to be encapsulated to protect privacy of
+	 * source node and destination node
+	 * @return the encapsulated message
+	 */
+	
+	private class EncapMsg extends Message {
+		
+		public EncapMsg(DTNHost from, DTNHost to, String id, int size) {
+			super(from, to, id, size);
+			// TODO Auto-generated constructor stub
+		}
+		
+		protected Message msg_replicate_encap(Message m) {
+			
+			DTNHost orig_from = m.getFrom();
+			DTNHost orig_to = m.getTo();
+			
+			
+			String encrypt_node_str = encrypt_source_node(orig_from);
+			
+			List<DTNHost> dtnhost_destinations_list = 
+					gen_pseu_list_destination_node(orig_to);
+			String destination_list = dtnhost_destinations_list.toString();
+			
+			EncapMsg encap_m = new EncapMsg(gen_pseu_dtnhost_id(orig_from), 
+					gen_pseu_dtnhost_id(orig_to), m.getId(),  m.getSize() + 
+					destination_list.length() + encrypt_node_str.length());
+			
+			encap_m.copyFrom(m);
+			
+			encap_m.addProperty("Encrypted Source Node Info", encrypt_node_str);
+			encap_m.addProperty("A List of Destinations", destination_list);
+			
+			return encap_m;
+		}
+		 
+	}
+	
+	
 	@Override
 	public void update() {
 		super.update();
@@ -263,36 +307,7 @@ public class E3PRouter extends ActiveRouter {
 	}
 	
 	
-	/**
-	 * Messages Encapsulation
-	 * @param m the message needed to be encapsulated to protect privacy of
-	 * source node and destination node
-	 * @return the encapsulated message
-	 */
-	
-	private Message messages_encapsulation(Message m) {
-		DTNHost orig_from = m.getFrom();
-		DTNHost orig_to = m.getTo();
-		
-		
-		String encrypt_node_str = encrypt_source_node(orig_from);
-		
-		List<DTNHost> dtnhost_destinations_list = 
-				gen_pseu_list_destination_node(orig_to);
-		String destination_list = dtnhost_destinations_list.toString();
-		new Message(orig_to, orig_to, destination_list, destination_num);
-		
-		Message encap_m = new Message(gen_pseu_dtnhost_id(orig_from), 
-				gen_pseu_dtnhost_id(orig_to), m.getId(),  m.getSize() + 
-				destination_list.length() + encrypt_node_str.length());
-		
-		encap_m.copyFrom(m);
-		
 
-		
-		return encap_m;
-		 
-	}
 	
 	private String encrypt_source_node(DTNHost from) {
 		String str_dtnhost = from.toString();
