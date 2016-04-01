@@ -247,8 +247,8 @@ public class E3PRouter extends ActiveRouter {
 			
 			encap_m.copyFrom(m);
 			
-			encap_m.addProperty("Encrypted Source Node Info", encrypt_node_str);
-			encap_m.addProperty("A List of Destinations", destination_list);
+			encap_m.addProperty("source_pseudo", encrypt_node_str);
+			encap_m.addProperty("destinations_list", dtnhost_destinations_list);
 			
 			return encap_m;
 		}
@@ -307,7 +307,36 @@ public class E3PRouter extends ActiveRouter {
 	}
 	
 	
+	@Override
+	protected List<Tuple<Message, Connection>> getMessagesForConnected() {
+		if (getNrofMessages() == 0 || getConnections().size() == 0) {
+			/* no messages -> empty list */
+			return new ArrayList<Tuple<Message, Connection>>(0);
+		}
 
+		List<Tuple<Message, Connection>> forTuples =
+			new ArrayList<Tuple<Message, Connection>>();
+		for (Message m : getMessageCollection()) {
+			for (Connection con : getConnections()) {
+				DTNHost to = con.getOtherNode(getHost());
+				
+				/**
+				 * Obtain the list of destination to match the connected node 
+				 * If there is one node who is one destination node in the
+				 * list, the message will be picked up
+				 */
+				@SuppressWarnings("unchecked")
+				List <DTNHost> dtnhost_destinations_list 
+					= (List <DTNHost>) m.getProperty("destinations_list");
+				if (dtnhost_destinations_list.equals(to)) {
+					forTuples.add(new Tuple<Message, Connection>(m,con));
+				}
+			}
+		}
+
+		return forTuples;
+	}
+	
 	
 	private String encrypt_source_node(DTNHost from) {
 		String str_dtnhost = from.toString();
