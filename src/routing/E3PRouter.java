@@ -7,13 +7,12 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+
 
 import routing.util.RoutingInfo;
 import util.Tuple;
 import core.Connection;
 import core.DTNHost;
-import core.DTNSim;
 import core.Message;
 import core.Settings;
 import core.SimClock;
@@ -64,7 +63,7 @@ public class E3PRouter extends ActiveRouter {
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
 	
-	/**public delivery predictabilities */
+	/** public delivery predictabilities */
 	private Map<DTNHost, Double> pub_preds;
 
 	/** last delivery predictability update (sim)time */
@@ -226,11 +225,17 @@ public class E3PRouter extends ActiveRouter {
 		
 		public EncapMsg(DTNHost from, DTNHost to, String id, int size) {
 			super(from, to, id, size);
-			// TODO Auto-generated constructor stub
+		}
+			
+		protected Message setTo(Message m, DTNHost to){
+			//change the destination to pass the examination in start transfer
+			EncapMsg encap_m = new EncapMsg(m.getFrom(), 
+					to, m.getId(),  m.getSize());
+			encap_m.copyFrom(m);
+			return encap_m;
 		}
 		
-		protected Message msg_replicate_encap(Message m) {
-			
+		protected EncapMsg msg_replicate_encap(Message m) {
 			DTNHost orig_from = m.getFrom();
 			DTNHost orig_to = m.getTo();
 			
@@ -252,7 +257,6 @@ public class E3PRouter extends ActiveRouter {
 			
 			return encap_m;
 		}
-		 
 	}
 	
 	
@@ -283,8 +287,6 @@ public class E3PRouter extends ActiveRouter {
 		if (connections.size() == 0) {
 			return null;
 		}
-
-		
 		
 		@SuppressWarnings(value = "unchecked")
 		Tuple<Message, Connection> t =
@@ -300,8 +302,6 @@ public class E3PRouter extends ActiveRouter {
 				return con;
 			}
 		}
-		
-		
 
 		return null;	
 	}
@@ -317,24 +317,71 @@ public class E3PRouter extends ActiveRouter {
 		List<Tuple<Message, Connection>> forTuples =
 			new ArrayList<Tuple<Message, Connection>>();
 		for (Message m : getMessageCollection()) {
+			
+			/* Get the message originated from this node and encapsulate it */
+			
+			EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+			Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+			if( m.getProperty("destinations_list") == null){
+				msg = encap_msg.msg_replicate_encap(m);
+			} else {
+				msg = m.replicate();
+			}
+			
 			for (Connection con : getConnections()) {
 				DTNHost to = con.getOtherNode(getHost());
 				
-				/**
+				/*
 				 * Obtain the list of destination to match the connected node 
 				 * If there is one node who is one destination node in the
 				 * list, the message will be picked up
 				 */
+				
 				@SuppressWarnings("unchecked")
 				List <DTNHost> dtnhost_destinations_list 
-					= (List <DTNHost>) m.getProperty("destinations_list");
+					= (List <DTNHost>) msg.getProperty("destinations_list");
 				if (dtnhost_destinations_list.equals(to)) {
-					forTuples.add(new Tuple<Message, Connection>(m,con));
+					forTuples.add(new Tuple<Message, Connection>(encap_msg.setTo(msg, to),con));
 				}
-			}
+			}	
+
 		}
 
 		return forTuples;
+	}
+	
+	@Override
+	public boolean requestDeliverableMessages(Connection con) {
+		if (isTransferring()) {
+			return false;
+		}
+
+		DTNHost other = con.getOtherNode(getHost());
+		/* do a copy to avoid concurrent modification exceptions
+		 * (startTransfer may remove messages) */
+		ArrayList<Message> temp =
+			new ArrayList<Message>(this.getMessageCollection());
+		for (Message m : temp) {
+			
+			EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+			Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+			
+			if( m.getProperty("destinations_list") == null){
+				msg = encap_msg.msg_replicate_encap(m);
+			} else {
+				msg = m.replicate();
+			}
+			
+			@SuppressWarnings("unchecked")
+			List <DTNHost> dtnhost_destinations_list 
+				= (List <DTNHost>) msg.getProperty("destinations_list");
+			if (dtnhost_destinations_list.equals(other)) {
+				if (startTransfer(encap_msg.setTo(msg, other), con) == RCV_OK) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 	
 	
