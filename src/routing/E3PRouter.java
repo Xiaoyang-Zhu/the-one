@@ -8,7 +8,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
 import routing.util.RoutingInfo;
 import util.Tuple;
 import core.Connection;
@@ -126,8 +125,53 @@ public class E3PRouter extends ActiveRouter {
 			DTNHost otherHost = con.getOtherNode(getHost());
 			updateDeliveryPredFor(otherHost);
 			updateTransitivePreds(otherHost);
+			
+			//Add function to calculate or update the public preds
+			updatePublicPreds();
 		}
 	}
+	
+	
+	
+	/**
+	 * Updates public predictions for a community.
+	 */
+	private void updatePublicPreds() {
+		List<Connection> connections = getConnections();
+		if (connections.size() >2) {
+			double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
+
+				if (timeDiff < 30) {
+					return;
+				} else {
+					initiate3PR();				
+				}
+				
+				this.lastAgeUpdate = SimClock.getTime();
+		}
+	}
+	
+	/**
+	 * Initiates 3PR to calculate the public DP for the community.
+	 */
+	private void initiate3PR() {
+		calculatePrivateMax();
+		
+		// set the value of public dp
+		
+	}
+	private void calculatePrivateMax() {
+		//flood the message carrying the initiating the 3PR signal
+		
+		
+		
+		calculatePrivateSum();
+
+	}
+	private void calculatePrivateSum() {
+		
+	}
+		
 
 	/**
 	 * Updates delivery predictions for a host.
@@ -148,6 +192,16 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	public double getPredFor(DTNHost host) {
 		ageDeliveryPreds(); // make sure preds are updated before getting
+		if (preds.containsKey(host)) {
+			return preds.get(host);
+		}
+		else {
+			return 0;
+		}
+	}
+	
+	
+	public double getPubPredFor(DTNHost host) {
 		if (preds.containsKey(host)) {
 			return preds.get(host);
 		}
