@@ -186,7 +186,7 @@ public class E3PRouter extends ActiveRouter {
 		//flood the message carrying the initiating the 3PR signal
 		
 		g = SimClock.getIntTime();
-		floodingMessagesToAllConnections(connections, "MAXINIT", g, 
+		floodingMessagesToAllConnections(connections, "MAXINIT", 0, 
 				"MAXINIT_SIG", 0);
 		
 		// loop for each private sum value
@@ -201,7 +201,7 @@ public class E3PRouter extends ActiveRouter {
 	}
 	
 	private void floodingMessagesToAllConnections(List<Connection> connections, 
-			String id_prefix, int instance_id, String app_id, int resSize) {
+			String id_prefix, int round_id, String app_id, int resSize) {
 		
 		for (Connection conn : connections) {
 			String id = id_prefix + SimClock.getIntTime() + "-" + 
@@ -209,7 +209,10 @@ public class E3PRouter extends ActiveRouter {
 			Message initmsg = new Message(getHost(),conn.getOtherNode(getHost()),
 					id, 1024);
 			initmsg.addProperty("type", id_prefix);
-			initmsg.addProperty("identifier", getHost().getAddress() + instance_id);
+			initmsg.addProperty("g", g);
+			if (round_id != 0) {
+				initmsg.addProperty("h", round_id);
+			}
 			initmsg.setAppID(app_id);
 			this.createNewMessage(initmsg);
 			initmsg.setResponseSize(resSize);
@@ -232,7 +235,18 @@ public class E3PRouter extends ActiveRouter {
 			}
 			
 		} else if (m.getAppID() == "MAXROUND_SIG") {
-			
+			int j = (int)m.getProperty("h") - (int)m.getProperty("g");
+			if (j == 0) {
+				
+			} else if (j == 1) {
+				
+			} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
+				
+			} else if (j == pred_accuracy * 4 + 1) {
+				
+			} else {
+				return null;
+			}
 		}
 
 
