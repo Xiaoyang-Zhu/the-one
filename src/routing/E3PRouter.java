@@ -28,6 +28,8 @@ public class E3PRouter extends ActiveRouter {
 	public static final double DEFAULT_BETA = 0.25;
 	/** the number of destination node default value */
 	public static final int DEFAULT_DESTINATION_NUM = 4;
+	/** the number of destination node default value */
+	public static final int DEFAULT_PRED_ACCURACY = 3;
 	/** delivery predictability aging constant */
 	public static final double GAMMA = 0.98;
 
@@ -51,13 +53,22 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	public static final String DESTINATION_NUM = "destination_num";
 	
-
+	/**
+	 * The number of accuracy -setting id ({@value}).
+	 * Default value for setting is {@link #DEFAULT_ACCURACY_PRED}.
+	 */
+	public static final String PRED_ACCURACY = "pred_accuracy";
+	
 	/** the value of nrof seconds in time unit -setting */
 	private int secondsInTimeUnit;
 	/** value of beta setting */
 	private double beta;
 	/** value of destination_num setting */
 	private int destination_num;
+	/** predictability accuracy */
+	private int pred_accuracy;
+	/** identifier 3PR instance */
+	private static int g = 0;
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
@@ -84,12 +95,20 @@ public class E3PRouter extends ActiveRouter {
 			beta = DEFAULT_BETA;
 		}
 		
-		/*Add the number of destination nodes*/
+		/* Add the number of destination nodes */
 		if (E3PSettings.contains(DESTINATION_NUM)) {
 			destination_num = E3PSettings.getInt(DESTINATION_NUM);
 		}
 		else {
 			destination_num = DEFAULT_DESTINATION_NUM;
+		}
+		
+		/* Predictability Accuracy*/
+		if (E3PSettings.contains(PRED_ACCURACY)) {
+			pred_accuracy = E3PSettings.getInt(PRED_ACCURACY);
+		}
+		else {
+			pred_accuracy = DEFAULT_PRED_ACCURACY;
 		}
 
 		initPreds();
@@ -104,6 +123,7 @@ public class E3PRouter extends ActiveRouter {
 		this.secondsInTimeUnit = r.secondsInTimeUnit;
 		this.beta = r.beta;
 		this.destination_num = r.destination_num;
+		this.pred_accuracy = r.pred_accuracy;
 		initPreds();
 	}
 
