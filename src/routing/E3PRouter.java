@@ -69,6 +69,8 @@ public class E3PRouter extends ActiveRouter {
 	private int pred_accuracy;
 	/** identifier 3PR instance */
 	private static int g = 0;
+	/** indicator of maximum value - default value is true */
+	private static boolean ismax = true;
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
@@ -164,7 +166,7 @@ public class E3PRouter extends ActiveRouter {
 				if (timeDiff < 30) {
 					return;
 				} else {
-					initiate3PR();				
+					initiate3PR(connections);				
 				}
 				
 				this.lastAgeUpdate = SimClock.getTime();
@@ -174,24 +176,83 @@ public class E3PRouter extends ActiveRouter {
 	/**
 	 * Initiates 3PR to calculate the public DP for the community.
 	 */
-	private void initiate3PR() {
-		calculatePrivateMax();
+	private void initiate3PR(List<Connection> connections) {
+		calculatePrivateMax(connections);
 		
 		// set the value of public dp
 		
 	}
-	private void calculatePrivateMax() {
+	private void calculatePrivateMax(List<Connection> connections) {
 		//flood the message carrying the initiating the 3PR signal
 		
+		g = SimClock.getIntTime();
+		floodingMessagesToAllConnections(connections, "MAXINIT", g, 
+				"MAXINIT_SIG", 0);
 		
+		// loop for each private sum value
+		for (int j = 0; j < pred_accuracy * 4 + 2; j++) {
+			int h = g +j;
+			floodingMessagesToAllConnections(connections, "MAXROUND", 
+					h, "MAXROUND_SIG", 2048);		
+		}
 		
 		calculatePrivateSum();
 
 	}
+	
+	private void floodingMessagesToAllConnections(List<Connection> connections, 
+			String id_prefix, int instance_id, String app_id, int resSize) {
+		
+		for (Connection conn : connections) {
+			String id = id_prefix + SimClock.getIntTime() + "-" + 
+					getHost().getAddress();
+			Message initmsg = new Message(getHost(),conn.getOtherNode(getHost()),
+					id, 1024);
+			initmsg.addProperty("type", id_prefix);
+			initmsg.addProperty("identifier", getHost().getAddress() + instance_id);
+			initmsg.setAppID(app_id);
+			this.createNewMessage(initmsg);
+			initmsg.setResponseSize(resSize);
+		}
+		
+	}
+	
 	private void calculatePrivateSum() {
 		
 	}
 		
+	@Override
+	public Message messageTransferred(String id, DTNHost from) {
+		Message m = super.messageTransferred(id, from);
+
+		// check if msg MAXINIT or MAXROUND for this host
+		if (m.getTo() == getHost() && m.getAppID() == "MAXINIT_SIG") {
+			for (int i = 0; i < preds.size(); i++) {
+				
+			}
+			
+		} else if (m.getAppID() == "MAXROUND_SIG") {
+			
+		}
+
+
+		
+		// check if msg was for this host and a response was requested
+		if (m.getTo() == getHost() && m.getResponseSize() > 0) {
+			// generate a response message
+			Message res = new Message(this.getHost(),m.getFrom(),
+					RESPONSE_PREFIX+m.getId(), m.getResponseSize());
+			if (m.getAppID() == "MAXINIT_SIG") {
+				res.addProperty("type", "MAXINIT_RESPONSE");
+				res.setAppID("MAXINIT_SIG_RESPONSE");		
+			}
+			this.createNewMessage(res);
+			this.getMessage(RESPONSE_PREFIX+m.getId()).setRequest(m);
+		}
+
+		return m;
+	}
+
 
 	/**
 	 * Updates delivery predictions for a host.
