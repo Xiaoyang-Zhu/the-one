@@ -192,8 +192,23 @@ public class E3PRouter extends ActiveRouter {
 		// loop for each private sum value
 		for (int j = 0; j < pred_accuracy * 4 + 2; j++) {
 			int h = g +j;
+			
+			if (j == 0) {
+				floodingMessagesToAllConnections(connections, "MAXROUND", 
+						h, "MAXROUND_SIG", 2048);
+				
+			} else if (j == 1) {
+				
+			} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
+				
+			} else if (j == pred_accuracy * 4 + 1) {
+				
+			} else {
+				
+			}
+			
 			floodingMessagesToAllConnections(connections, "MAXROUND", 
-					h, "MAXROUND_SIG", 2048);		
+					h, "MAXROUND_SIG", 2048);
 		}
 		
 		calculatePrivateSum();
@@ -201,7 +216,7 @@ public class E3PRouter extends ActiveRouter {
 	}
 	
 	private void floodingMessagesToAllConnections(List<Connection> connections, 
-			String id_prefix, int round_id, String app_id, int resSize) {
+			String id_prefix, int instance_id, String app_id, int resSize) {
 		
 		for (Connection conn : connections) {
 			String id = id_prefix + SimClock.getIntTime() + "-" + 
@@ -210,8 +225,8 @@ public class E3PRouter extends ActiveRouter {
 					id, 1024);
 			initmsg.addProperty("type", id_prefix);
 			initmsg.addProperty("g", g);
-			if (round_id != 0) {
-				initmsg.addProperty("h", round_id);
+			if (instance_id != 0) {
+				initmsg.addProperty("h", instance_id);
 			}
 			initmsg.setAppID(app_id);
 			this.createNewMessage(initmsg);
