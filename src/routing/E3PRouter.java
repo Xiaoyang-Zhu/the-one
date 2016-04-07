@@ -16,6 +16,9 @@ import core.Message;
 import core.Settings;
 import core.SimClock;
 
+import java.util.Random;  
+
+
 /**
  * Implementation of E3PR router as described in
  * <I>Probabilistic routing in intermittently connected networks</I> by
@@ -77,6 +80,9 @@ public class E3PRouter extends ActiveRouter {
 	
 	/** public delivery predictabilities */
 	private Map<DTNHost, Double> pub_preds;
+	
+	/** calculating  predictabilities temporary memory*/
+	private Map<DTNHost, Double> cal_preds;
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -186,16 +192,14 @@ public class E3PRouter extends ActiveRouter {
 		//flood the message carrying the initiating the 3PR signal
 		
 		g = SimClock.getIntTime();
-		floodingMessagesToAllConnections(connections, "MAXINIT", 0, 
-				"MAXINIT_SIG", 0);
 		
 		// loop for each private sum value
 		for (int j = 0; j < pred_accuracy * 4 + 2; j++) {
 			int h = g +j;
-			
+				
 			if (j == 0) {
-				floodingMessagesToAllConnections(connections, "MAXROUND", 
-						h, "MAXROUND_SIG", 2048);
+				floodingMessagesToAllConnections(connections, "MAXINIT", 
+						h, 2048);
 				
 			} else if (j == 1) {
 				
@@ -208,7 +212,7 @@ public class E3PRouter extends ActiveRouter {
 			}
 			
 			floodingMessagesToAllConnections(connections, "MAXROUND", 
-					h, "MAXROUND_SIG", 2048);
+					h, 2048);
 		}
 		
 		calculatePrivateSum();
@@ -216,7 +220,7 @@ public class E3PRouter extends ActiveRouter {
 	}
 	
 	private void floodingMessagesToAllConnections(List<Connection> connections, 
-			String id_prefix, int instance_id, String app_id, int resSize) {
+			String id_prefix, int instance_id, int resSize) {
 		
 		for (Connection conn : connections) {
 			String id = id_prefix + SimClock.getIntTime() + "-" + 
@@ -224,13 +228,65 @@ public class E3PRouter extends ActiveRouter {
 			Message initmsg = new Message(getHost(),conn.getOtherNode(getHost()),
 					id, 1024);
 			initmsg.addProperty("type", id_prefix);
+			initmsg.addProperty("leader", getHost());
 			initmsg.addProperty("g", g);
 			if (instance_id != 0) {
 				initmsg.addProperty("h", instance_id);
 			}
-			initmsg.setAppID(app_id);
+			Random rand = new Random();
+			int random_val = rand.nextInt(10);
+			initmsg.addProperty("random_value", random_val);
+			
+			cal_preds = this.getDeliveryPreds();
+
+			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+
+				double pOld = getPredFor(e.getKey()); // P(a,c)_old
+				double pNew = pOld - random_val;
+				cal_preds.put(e.getKey(), pNew);
+			}
+			
+			getProcessedPredForFloodingMessage(instance_id - g, connections.size());
 			this.createNewMessage(initmsg);
 			initmsg.setResponseSize(resSize);
+		}
+		
+	}
+	
+	private void getProcessedPredForFloodingMessage(int looptime_j, 
+			int connections_num) {
+		
+		if (looptime_j == 0) {
+			// messages all p_i
+			for (int i = 0; i < connections_num; i++) {
+				 Random rand = new Random();
+				 
+				 Map<DTNHost, Double> Preds =
+							this.getDeliveryPreds();
+
+					for (Map.Entry<DTNHost, Double> e : Preds.entrySet()) {
+
+						double pOld = getPredFor(e.getKey()); // P(a,c)_old
+						double pNew = pOld - rand.nextInt(10);
+						preds.put(e.getKey(), pNew);
+					}
+					
+
+				 this.getDeliveryPreds();
+			}
+
+			
+			
+			
+			
+		} else if (looptime_j == 1) {
+			
+		} else if ((looptime_j > 1) && (looptime_j < pred_accuracy * 4 + 1)){
+			
+		} else if (looptime_j == pred_accuracy * 4 + 1) {
+			
+		} else {
+			
 		}
 		
 	}
