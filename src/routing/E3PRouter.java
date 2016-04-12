@@ -154,7 +154,10 @@ public class E3PRouter extends ActiveRouter {
 			updateDeliveryPredFor(otherHost);
 			updateTransitivePreds(otherHost);
 			
-			//Add function to calculate or update the public preds
+			/* 
+			 * Add function to calculate or update the public preds
+			 * Add the condition used to differentiate leader and members 
+			 */
 			updatePublicPreds();
 		}
 	}
@@ -165,32 +168,28 @@ public class E3PRouter extends ActiveRouter {
 	 * Updates public predictions for a community.
 	 */
 	private void updatePublicPreds() {
-		List<Connection> connections = getConnections();
-		if (connections.size() >2) {
-			double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
+		
+		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
 
-				if (timeDiff < 30) {
-					return;
-				} else {
-					initiate3PR(connections);				
-				}
-				
-				this.lastAgeUpdate = SimClock.getTime();
+		if (timeDiff < 30) {
+			return;
+		} else {
+			calculatePrivateMax();				
 		}
+		
+		this.lastAgeUpdate = SimClock.getTime();
+		
 	}
 	
 	/**
 	 * Initiates 3PR to calculate the public DP for the community.
 	 */
-	private void initiate3PR(List<Connection> connections) {
-		calculatePrivateMax(connections);
-		
-		// set the value of public dp
-		
-	}
-	private void calculatePrivateMax(List<Connection> connections) {
+
+	private void calculatePrivateMax() {
 		//flood the message carrying the initiating the 3PR signal
 		
+		List<Connection> connections = getConnections();
+
 		g = SimClock.getIntTime();
 		
 		// loop for each private sum value
