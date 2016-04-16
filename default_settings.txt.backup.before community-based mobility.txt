@@ -28,7 +28,7 @@ highspeedInterface.type = SimpleBroadcastInterface
 highspeedInterface.transmitSpeed = 10M
 highspeedInterface.transmitRange = 10
 
-# Define 4 different node groups
+# Define 6 different node groups
 Scenario.nrofHostGroups = 4
 
 ## Group-specific settings:
@@ -52,8 +52,7 @@ Scenario.nrofHostGroups = 4
 
 
 # Common settings for all groups
-Group.movementModel = CommunityBasedMovement
-#Group.movementModel = MapBasedMovement
+Group.movementModel = ShortestPathMapBasedMovement
 Group.router = ProphetRouter
 #Group.router = E3PRouter
 
@@ -63,8 +62,7 @@ Group.waitTime = 0, 120
 Group.nrofInterfaces = 1
 Group.interface1 = btInterface
 # Walking speeds
-#Group.speed = 0.5, 1.5
-Group.speed = 3, 6
+Group.speed = 0.5, 1.5
 # Message TTL of 300 minutes (5 hours)
 Group.msgTtl = 300
 
@@ -80,9 +78,13 @@ Group2.groupID = b
 # 10-50 km/h
 #Group2.speed = 2.7, 13.9
 
-Group3.groupID = c
+# group of wittness
+Group3.groupID = w
+Group3.nrofHosts = 5
 
-Group4.groupID = d
+# group of target
+Group4.groupID = t
+Group4.nrofHosts = 1
 
 ## Message creation parameters
 # How many event generators
@@ -95,7 +97,7 @@ Events1.interval = 25,35
 # Message sizes (500kB - 1MB)
 Events1.size = 500k,1M
 # range of message source/destination addresses
-Events1.hosts = 0,36
+Events1.hosts = 0,24
 # Message ID prefix
 Events1.prefix = M
 
@@ -104,15 +106,9 @@ Events1.prefix = M
 # seed for movement models' pseudo random number generator (default = 0)
 MovementModel.rngSeed = 1
 # World's size for Movement Models without implicit size (width, height; meters)
-MovementModel.worldSize = 2000,1500
+MovementModel.worldSize = 10020,8830
 # How long time to move hosts in the world before real simulation
-MovementModel.warmup = 10
-
-## Community based movement -movement model specific settings
-CommunityBasedMovement.communityNumber = 2,2
-CommunityBasedMovement.mapSize = 2000, 1500
-CommunityBasedMovement.communityID = a,b,c,d
-CommunityBasedMovement.probabilities_local_roaming = 0.8, 0.2
+MovementModel.warmup = 1000
 
 ## Map based movement -movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
@@ -155,6 +151,6 @@ GUI.UnderlayImage.scale = 4.75
 GUI.UnderlayImage.rotate = -0.015
 
 # how many events to show in the log panel (default = 30)
-GUI.EventLogPanel.nrofEvents = 30
+GUI.EventLogPanel.nrofEvents = 100
 # Regular Expression log filter (see Pattern-class from the Java API for RE-matching details)
 #GUI.EventLogPanel.REfilter = .*p[1-9]<->p[1-9]$

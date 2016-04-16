@@ -10,6 +10,7 @@
  */
 package movement;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import core.Coord;
@@ -24,6 +25,9 @@ public class CommunityBasedMovement extends MovementModel {
 	public static final String	MAP_SIZE = "mapSize";
 	/* Community identifier that should be identical to the Group ID in configuration file */
 	public static final String	COMMUNITY_ID = "communityID";
+	
+	public static final String COMMUNITY_BASED_MOVEMENT_MODEL_NS = "CommunityBasedMovement";
+
 
 	/* Probabilities of local or roaming epoch */
 	public static final String	PROBABILITIES_LOCAL_ROAMING = "probabilities_local_roaming";
@@ -34,10 +38,10 @@ public class CommunityBasedMovement extends MovementModel {
 	private int 	community_x_number = 1, community_y_number = 1;
 	
 	/* Community identifier that should be identical to the Group ID in configuration file */
-	private String[]	community_id;
+	private static String[]	community_id;
 	
 	/* Communities' attributes include the community_id and the coordinates */
-	private Map<String, double[]> community_attribute;
+	private static Map<String, double[]> community_attribute = new HashMap<String, double[]>();
 
 	/* Minimum unit of community */
 	private double x_unit, y_unit;
@@ -49,7 +53,7 @@ public class CommunityBasedMovement extends MovementModel {
 	private double [] selected_community = null;
 	
 	/* Probabilities of local or roaming epoch */
-	private double p_l = 0.8, p_r = 0.2;
+	private static double p_l = 0.8, p_r = 0.2;
 	
 	/* Selecting not the current community */
 	private int rnd_i;
@@ -60,6 +64,9 @@ public class CommunityBasedMovement extends MovementModel {
 
 	public CommunityBasedMovement(Settings s) {
 		super(s);
+
+		/* Loading the parameters in configuration file */
+		s.setNameSpace(COMMUNITY_BASED_MOVEMENT_MODEL_NS);
 
 		if (s.contains(COMMUNITY_NUMBER)){
 			int[] cn = s.getCsvInts(COMMUNITY_NUMBER,2);
@@ -72,35 +79,39 @@ public class CommunityBasedMovement extends MovementModel {
 			this.map_y_max = ms[1];
 		}
 		if (s.contains(COMMUNITY_ID)){
-			this.community_id = s.getSetting(COMMUNITY_ID).split(",");
+			community_id = s.getSetting(COMMUNITY_ID).split(",");
 		}
 		if (s.contains(PROBABILITIES_LOCAL_ROAMING)){
 			double[] plr = s.getCsvDoubles(PROBABILITIES_LOCAL_ROAMING,2);
-			this.p_l = plr[0];
-			this.p_r = plr[1];
+			p_l = plr[0];
+			p_r = plr[1];
 		}
 		
 		
 		/* According to the setting parameters to initiate the coordinates information of each community */
-		assert (this.community_id.length == (this.community_x_number) * 
+		assert (community_id.length == (this.community_x_number) * 
 				(this.community_y_number)) : "the number of communityID is not correct!";
 		
 		x_unit = map_x_max/community_x_number;
 		y_unit = map_y_max/community_y_number;
 		
+		double community_x_min = 0, community_y_min = 0;
+		double community_x_max = x_unit, community_y_max = y_unit;
+		int array_counter = 0;
 		for (int i = 0; i < this.community_y_number; i++) {
-			double community_x_min = 0, community_y_min = 0;
-			double community_x_max = x_unit, community_y_max = y_unit;
-			
 			for (int j = 0; j < this.community_x_number; j++) {
 				double[] community_attribute_coordinates = {community_x_min, community_y_min, 
-						community_x_max * (j + 1), community_y_max * (i + 1)};
+						community_x_max, community_y_max};
 				
-				community_attribute.put(this.community_id[(i + 1) * (j + 1)], community_attribute_coordinates);
+				community_attribute.put(community_id[array_counter++], community_attribute_coordinates);
 				
 				community_x_min = community_x_max;
+				community_x_max = community_x_max + x_unit;
 			}		
-			community_y_min = community_y_max;				
+			community_x_min = 0;
+			community_y_min += y_unit;
+			community_x_max = x_unit;
+			community_y_max += y_unit;
 		}	
 		
 	}
