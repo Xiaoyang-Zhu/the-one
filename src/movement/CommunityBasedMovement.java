@@ -14,7 +14,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import core.Coord;
-import core.DTNHost;
 import core.Settings;
 
 public class CommunityBasedMovement extends MovementModel {
@@ -164,7 +163,12 @@ public class CommunityBasedMovement extends MovementModel {
 	public CommunityBasedMovement replicate() {
 		return new CommunityBasedMovement(this);
 	}
-	
+
+	/**
+	 * Generate a random coordinates in the given community area.
+	 * @param community_area
+	 * @return
+	 */
 	protected Coord randomCoord(double[] community_area) {
 		assert community_area.length == 4 : "Community's coordinates have errors!";
 		
@@ -176,6 +180,10 @@ public class CommunityBasedMovement extends MovementModel {
 		return new Coord(x,y);
 	}
 	
+	/**
+	 * Decide the states of the node by the probabilities: local or roaming epoch 
+	 * @return Final destination 
+	 */
 	protected Coord local_roaming_selection() {
 		 if (((rng.nextDouble()) * 100) < (p_l * 100)) {
 			 return randomCoord(selected_community);
@@ -188,9 +196,7 @@ public class CommunityBasedMovement extends MovementModel {
 			 }while((selected_community.equals(not_selected_community)));
 			 
 			 return randomCoord(not_selected_community);
-		 }
-		
-		
+		 }	
 		
 	}
 

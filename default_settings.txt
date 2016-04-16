@@ -106,13 +106,14 @@ MovementModel.rngSeed = 1
 # World's size for Movement Models without implicit size (width, height; meters)
 MovementModel.worldSize = 2000,1500
 # How long time to move hosts in the world before real simulation
-MovementModel.warmup = 10
+MovementModel.warmup = 1000
 
 ## Community based movement -movement model specific settings
 CommunityBasedMovement.communityNumber = 2,2
 CommunityBasedMovement.mapSize = 2000, 1500
 CommunityBasedMovement.communityID = a,b,c,d
-CommunityBasedMovement.probabilities_local_roaming = 0.8, 0.2
+#CommunityBasedMovement.probabilities_local_roaming = 1,0
+CommunityBasedMovement.probabilities_local_roaming = 0.8,0.2
 
 ## Map based movement -movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
