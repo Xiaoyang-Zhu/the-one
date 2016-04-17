@@ -74,6 +74,9 @@ public class E3PRouter extends ActiveRouter {
 	private static int g = 0;
 	/** indicator of maximum value - default value is true */
 	private static boolean ismax = true;
+	/** variant to control the number of loops in leader nodes */
+	private static int j = 0;
+
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
@@ -174,6 +177,7 @@ public class E3PRouter extends ActiveRouter {
 		if (timeDiff < 30) {
 			return;
 		} else {
+			initiateE3PR();
 			calculatePrivateMax();				
 		}
 		
@@ -181,12 +185,55 @@ public class E3PRouter extends ActiveRouter {
 		
 	}
 	
+	
 	/**
-	 * Initiates 3PR to calculate the public DP for the community.
+	 * Initiates 3PR to flood the message carrying the initiating the 
+	 * 3PR signal
 	 */
+	private void initiateE3PR() {
+		
+
+		
+		if (j == 0) {
+			
+		} else if (j == 1) {
+			
+		} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
+			
+		} else if (j == pred_accuracy * 4 + 1) {
+			
+		} else {
+			
+		}
+		//Encapsulate the signal message
+		
+	}
+	
+	private Message encapsulateInitSignal() {
+		/* Prepare the parameters for initiating signal */
+		String l = getHost().toString();
+		g = SimClock.getIntTime();
+		// Get the groupID of the community 
+		String[] hostname= l.split(String.valueOf
+				(getHost().getAddress()));
+		
+		Message initmsg = new Message(getHost(),getHost(),
+				l + g, 1024);
+		initmsg.addProperty("hostname", l);
+		initmsg.addProperty("maxInstanceID", g);
+		initmsg.addProperty("communityID", hostname[0]);
+		initmsg.addProperty("sumInstanceID", j + g);
+		
+		//if they belong to the same community
+		
+		tryAllMessagesToAllConnections();
+		
+		return initmsg;
+		
+	}
+
 
 	private void calculatePrivateMax() {
-		//flood the message carrying the initiating the 3PR signal
 		
 		List<Connection> connections = getConnections();
 
@@ -273,11 +320,7 @@ public class E3PRouter extends ActiveRouter {
 
 				 this.getDeliveryPreds();
 			}
-
-			
-			
-			
-			
+	
 		} else if (looptime_j == 1) {
 			
 		} else if ((looptime_j > 1) && (looptime_j < pred_accuracy * 4 + 1)){
