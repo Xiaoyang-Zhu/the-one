@@ -6,7 +6,26 @@
 /**
  * CommunityBasedMovement where the coordinates are restricted to rectangle
  * area defined by two coordinates in the entire map.
+ * 
+ * Four parameters for configuration file:
+ * CommunityBasedMovement.communityNumber: the number of rectangle community
+ *		e.g. if you have 12 communities, you could set the value to 3,4 or 4,3
+ * CommunityBasedMovement.mapSize: the size of map should be identical to worldSize
+ * 		e.g. CommunityBasedMovement.mapSize = x,y : x,y are the maximum coordinates
+ * 			in X-Axis and Y-Axis respectively 
+ * CommunityBasedMovement.communityID = a,b,c,d: all community identity
+ * CommunityBasedMovement.probabilities_local_roaming: probabilities for p_local and 
+ * 		p_roaming
+ * 
+ * Note: To run this movement model:
+ * 1. Move the configuration file "communitybasedmovement_settings.txt" from 
+ * the directory "example_settings" to root directory
+ * 2.rename the configuration to "default_settings.txt" to replace the original
+ * one
+ * 3. recompile the code
+ * 
  * @author Xiaoyang Zhu
+ * @email xiaoyang.zhu@hotmail.com
  */
 package movement;
 
@@ -18,7 +37,7 @@ import core.Settings;
 
 public class CommunityBasedMovement extends MovementModel {
 	/* Number of the Community: 
-	   e.g. if you have 12 communities, you could set the value to (3,4) or (4,3) */
+	   e.g. if you have 12 communities, you could set the value to 3,4 or 4,3 */
 	public static final String COMMUNITY_NUMBER = "communityNumber";
 	/* Size of the map */
 	public static final String	MAP_SIZE = "mapSize";
@@ -54,6 +73,9 @@ public class CommunityBasedMovement extends MovementModel {
 	/* Probabilities of local or roaming epoch */
 	private static double p_l = 0.8, p_r = 0.2;
 	
+	/* Probability that a give epoch of node is a local one */
+	private static double pi_l;
+	
 	/* Selecting not the current community */
 	private int rnd_i;
 	private double [] not_selected_community = null;
@@ -86,6 +108,8 @@ public class CommunityBasedMovement extends MovementModel {
 			p_r = plr[1];
 		}
 		
+		/* Calculate the probability according to Markov Chain */
+		pi_l = (1 - p_r)/(2 - p_l - p_r);
 		
 		/* According to the setting parameters to initiate the coordinates information of each community */
 		assert (community_id.length == (this.community_x_number) * 
@@ -185,7 +209,7 @@ public class CommunityBasedMovement extends MovementModel {
 	 * @return Final destination 
 	 */
 	protected Coord local_roaming_selection() {
-		 if (((rng.nextDouble()) * 100) < (p_l * 100)) {
+		 if (((rng.nextDouble()) * 100) < (pi_l * 100)) {
 			 return randomCoord(selected_community);
 		 } else {
 			 
