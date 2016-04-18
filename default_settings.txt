@@ -135,6 +135,7 @@ Report.report2 = ConnectivityONEReport
 ## Default settings for some routers settings
 ProphetRouter.secondsInTimeUnit = 30
 E3PRouter.secondsInTimeUnit = 30
+E3PRouter.leadersID = a0,b9,c18,d27 
 SprayAndWaitRouter.nrofCopies = 6
 SprayAndWaitRouter.binaryMode = true
 

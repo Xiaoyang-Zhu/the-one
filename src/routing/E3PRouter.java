@@ -35,7 +35,9 @@ public class E3PRouter extends ActiveRouter {
 	public static final int DEFAULT_PRED_ACCURACY = 3;
 	/** delivery predictability aging constant */
 	public static final double GAMMA = 0.98;
-
+	/** k constant value */
+	public static final int DEFAULT_K_VALUE = 2;
+	
 	/** E3P router's setting namespace ({@value})*/
 	public static final String E3P_NS = "E3PRouter";
 	/**
@@ -43,6 +45,12 @@ public class E3PRouter extends ActiveRouter {
 	 * How many seconds one time unit is when calculating aging of
 	 * delivery predictions. Should be tweaked for the scenario.*/
 	public static final String SECONDS_IN_UNIT_S ="secondsInTimeUnit";
+	
+	/** Leaders' ID predefined in configuration file */
+	public static final String	LEADERS_ID = "leadersID";
+	
+	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
+	public static final String	K_VALUE = "kValue";
 
 	/**
 	 * Transitivity scaling constant (beta) -setting id ({@value}).
@@ -76,6 +84,12 @@ public class E3PRouter extends ActiveRouter {
 	private static boolean ismax = true;
 	/** variant to control the number of loops in leader nodes */
 	private static int j = 0;
+	
+	/** Leaders' ID predefined in configuration file */
+	private static String[]	leaders_id;
+	
+	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
+	private static int k_value;
 
 
 	/** delivery predictabilities */
@@ -121,6 +135,19 @@ public class E3PRouter extends ActiveRouter {
 		else {
 			pred_accuracy = DEFAULT_PRED_ACCURACY;
 		}
+		
+		/* k_value */
+		if (E3PSettings.contains(K_VALUE)) {
+			k_value = E3PSettings.getInt(K_VALUE);
+		}
+		else {
+			k_value = DEFAULT_K_VALUE;
+		}
+		
+		/* Designate leaders of each community */
+		if (s.contains(LEADERS_ID)){
+			leaders_id = s.getSetting(LEADERS_ID).split(",");
+		}
 
 		initPreds();
 	}
@@ -157,11 +184,12 @@ public class E3PRouter extends ActiveRouter {
 			updateDeliveryPredFor(otherHost);
 			updateTransitivePreds(otherHost);
 			
-			/* 
-			 * Add function to calculate or update the public preds
-			 * Add the condition used to differentiate leader and members 
-			 */
-			updatePublicPreds();
+			//If the node is leader, then try to updatePublicPreds
+			for (String leader : leaders_id) {
+				if (getHost().toString() == leader) {
+					updatePublicPreds();
+				}
+			}
 		}
 	}
 	
@@ -192,9 +220,10 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private void initiateE3PR() {
 		
-
 		
 		if (j == 0) {
+			
+			//p value
 			
 		} else if (j == 1) {
 			
@@ -206,6 +235,10 @@ public class E3PRouter extends ActiveRouter {
 			
 		}
 		//Encapsulate the signal message
+		
+		encapsulateInitSignal();
+		
+		//flood the message
 		
 	}
 	
