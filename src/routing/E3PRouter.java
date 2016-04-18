@@ -32,7 +32,7 @@ public class E3PRouter extends ActiveRouter {
 	/** the number of destination node default value */
 	public static final int DEFAULT_DESTINATION_NUM = 4;
 	/** the number of destination node default value */
-	public static final int DEFAULT_PRED_ACCURACY = 3;
+	public static final int DEFAULT_PRED_ACCURACY = 4;
 	/** delivery predictability aging constant */
 	public static final double GAMMA = 0.98;
 	/** k constant value */
@@ -100,7 +100,7 @@ public class E3PRouter extends ActiveRouter {
 	private Map<DTNHost, Double> pub_preds;
 	
 	/** calculating  predictabilities temporary memory*/
-	private Map<DTNHost, Double> cal_preds;
+	private Map<DTNHost, Double> cal_preds, distrib_preds;
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -385,21 +385,21 @@ public class E3PRouter extends ActiveRouter {
 			int j = (int)m.getProperty("sumInstanceID") - (int)m.getProperty("maxInstanceID");
 			// assignment the value p_i
 			if (j == 0) {
-				
-			} else if (j == 1) {
-				
-			} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
-				
-			} else if (j == pred_accuracy * 4 + 1) {
+				cal_preds = this.getDeliveryPreds();
+				distrib_preds = cal_preds;
+			} else if ((j > 0) && (j < pred_accuracy + 1)){
+				cal_preds = this.getDeliveryPreds();
+
+			} else if (j == pred_accuracy + 1) {
+				cal_preds = this.getDeliveryPreds();
+				// if ismax = true set 0
 				
 			} else {
 				return null;
 			}
 			
-			//according k to transmit the random number
-			
 			blurringOrignalProbability();
-			
+
 		}
 		return m;
 	}
@@ -408,6 +408,20 @@ public class E3PRouter extends ActiveRouter {
 		
 		
 		//when encounter k nodes, send the random number and receive the random number 
+		
+		//according k to transmit the random number
+		// next time when nodes encounter, they exchange their random numbers
+		
+		Random rand = new Random();
+		int random_val = rand.nextInt(10);
+		
+		for (Map.Entry<DTNHost, Double> e : distrib_preds.entrySet()) {
+
+			double pOld = getPredFor(e.getKey()); // P(a,c)_old
+			double pNew = pOld - random_val;
+			cal_preds.put(e.getKey(), pNew);
+		}
+		
 		
 		//send the blurring probability to leader, if getHost() is leader hold, if not send it
 		
