@@ -91,6 +91,7 @@ public class E3PRouter extends ActiveRouter {
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	private static int k_value;
 
+	private static String community_id;
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
@@ -206,7 +207,6 @@ public class E3PRouter extends ActiveRouter {
 			return;
 		} else {
 			initiateE3PR();
-			calculatePrivateMax();				
 		}
 		
 		this.lastAgeUpdate = SimClock.getTime();
@@ -218,27 +218,32 @@ public class E3PRouter extends ActiveRouter {
 	 * Initiates 3PR to flood the message carrying the initiating the 
 	 * 3PR signal
 	 */
-	private void initiateE3PR() {
-		
-		
-		if (j == 0) {
-			
-			//p value
-			
-		} else if (j == 1) {
-			
-		} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
-			
-		} else if (j == pred_accuracy * 4 + 1) {
-			
-		} else {
-			
+	private Connection initiateE3PR() {
+	
+		List<Connection> connections = getConnections();
+		if (connections.size() == 0 || this.getNrofMessages() == 0) {
+			return null;
 		}
-		//Encapsulate the signal message
 		
-		encapsulateInitSignal();
+		List<Message> messages = new ArrayList<Message>();
 		
-		//flood the message
+		//Encapsulate the signal message and add to the message list
+		messages.add(encapsulateInitSignal());
+		this.sortByQueueMode(messages);
+			
+		for (int i=0, n=connections.size(); i<n; i++) {
+			Connection con = connections.get(i);
+			
+			assert community_id != null : "No community ID!";
+			if (!(con.getOtherNode(getHost()).toString().startsWith(community_id))) {
+				Message started = tryAllMessages(con, messages);
+				if (started != null) {
+					return con;
+				}
+			}
+
+		}
+		return null;
 		
 	}
 	
@@ -249,17 +254,15 @@ public class E3PRouter extends ActiveRouter {
 		// Get the groupID of the community 
 		String[] hostname= l.split(String.valueOf
 				(getHost().getAddress()));
+		community_id = hostname[0];
 		
 		Message initmsg = new Message(getHost(),getHost(),
 				l + g, 1024);
+		initmsg.setAppID("INIT_SIGNAL");
 		initmsg.addProperty("hostname", l);
 		initmsg.addProperty("maxInstanceID", g);
-		initmsg.addProperty("communityID", hostname[0]);
+		initmsg.addProperty("communityID", community_id);
 		initmsg.addProperty("sumInstanceID", j + g);
-		
-		//if they belong to the same community
-		
-		tryAllMessagesToAllConnections();
 		
 		return initmsg;
 		
@@ -374,14 +377,13 @@ public class E3PRouter extends ActiveRouter {
 	public Message messageTransferred(String id, DTNHost from) {
 		Message m = super.messageTransferred(id, from);
 
-		// check if msg MAXINIT or MAXROUND for this host
-		if (m.getTo() == getHost() && m.getAppID() == "MAXINIT_SIG") {
-			for (int i = 0; i < preds.size(); i++) {
-				
-			}
-			
-		} else if (m.getAppID() == "MAXROUND_SIG") {
-			int j = (int)m.getProperty("h") - (int)m.getProperty("g");
+		/* check if msg is initiating signal message, then according to j
+		 * to provide different p_i to calculate the value
+		 */
+		
+		if (m.getAppID().equals("INIT_SIGNAL")) {
+			int j = (int)m.getProperty("sumInstanceID") - (int)m.getProperty("maxInstanceID");
+			// assignment the value p_i
 			if (j == 0) {
 				
 			} else if (j == 1) {
@@ -393,25 +395,26 @@ public class E3PRouter extends ActiveRouter {
 			} else {
 				return null;
 			}
+			
+			//according k to transmit the random number
+			
+			blurringOrignalProbability();
+			
 		}
-
-
-		
-		// check if msg was for this host and a response was requested
-		if (m.getTo() == getHost() && m.getResponseSize() > 0) {
-			// generate a response message
-			Message res = new Message(this.getHost(),m.getFrom(),
-					RESPONSE_PREFIX+m.getId(), m.getResponseSize());
-			if (m.getAppID() == "MAXINIT_SIG") {
-				res.addProperty("type", "MAXINIT_RESPONSE");
-				res.setAppID("MAXINIT_SIG_RESPONSE");		
-			}
-			this.createNewMessage(res);
-			this.getMessage(RESPONSE_PREFIX+m.getId()).setRequest(m);
-		}
-
 		return m;
 	}
+	
+	private void blurringOrignalProbability() {
+		
+		
+		//when encounter k nodes, send the random number and receive the random number 
+		
+		//send the blurring probability to leader, if getHost() is leader hold, if not send it
+		
+		
+		
+	}
+
 
 
 	/**
