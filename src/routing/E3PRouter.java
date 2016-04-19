@@ -81,20 +81,23 @@ public class E3PRouter extends ActiveRouter {
 	/** predictability accuracy */
 	private int pred_accuracy;
 	/** identifier 3PR instance */
-	private static int g = 0;
+	private int g = 0;
 	/** indicator of maximum value - default value is true */
-	private static boolean ismax = true;
+	private boolean ismax = false;
 	/** variant to control the number of loops in leader nodes */
-	private static int j = 0;
+	private int j = 0;
+	/** Leader indicator */
+	private boolean isleader = false;
+
 	
 	/** Leaders' ID predefined in configuration file */
 	private static String[]	leaders_id;
 	
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	private static int k_value;
-	private static int encountered_nodes_num = 0;
+	private int encountered_nodes_num = 0;
 
-	private static String community_id;
+	private String community_id;
 
 	/** delivery predictabilities */
 	private Map<DTNHost, Double> preds;
@@ -106,7 +109,7 @@ public class E3PRouter extends ActiveRouter {
 	private Map<DTNHost, Double> cal_preds = null;
 	
 	/** DTN leader Host*/
-	private static DTNHost leaderDTNHost = null;
+	private DTNHost leaderDTNHost = null;
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -169,7 +172,22 @@ public class E3PRouter extends ActiveRouter {
 		this.beta = r.beta;
 		this.destination_num = r.destination_num;
 		this.pred_accuracy = r.pred_accuracy;
+		this.isleader = r.isleader;
+		this.g = r.g;
+		this.j = r.j;
+		this.ismax = r.ismax;
+		this.encountered_nodes_num = r.encountered_nodes_num;
+		this.community_id = r.community_id;
+		this.leaderDTNHost = r.leaderDTNHost;
+		//If the node is the leader of the community
+		for (String s: leaders_id) {
+			if (r.getHost().toString().startsWith(s)) {
+				this.isleader = true;
+			}
+		}
+		
 		initPreds();
+
 	}
 
 	/**
@@ -192,10 +210,8 @@ public class E3PRouter extends ActiveRouter {
 			updateTransitivePreds(otherHost);
 			
 			//If the node is leader, then try to updatePublicPreds
-			for (String leader : leaders_id) {
-				if (getHost().toString() == leader) {
-					updatePublicPreds();
-				}
+			if (isleader) {
+				initiateE3PR();
 			}
 			
 			if (cal_preds != null) {
@@ -223,7 +239,6 @@ public class E3PRouter extends ActiveRouter {
 		} else {
 			//send the random number to each other and calculate the cal_preds
 			exchangeRandomNumbers(con, 2048);
-			
 		}
 		
 	}
@@ -288,16 +303,7 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private void updatePublicPreds() {
 		
-		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
 
-		if (timeDiff < 30) {
-			return;
-		} else {
-			initiateE3PR();
-		}
-		
-		//this should be move to the compeletion of the public preds update
-		this.lastAgeUpdate = SimClock.getTime();
 		
 	}
 	
@@ -307,6 +313,12 @@ public class E3PRouter extends ActiveRouter {
 	 * 3PR signal
 	 */
 	private Connection initiateE3PR() {
+		
+		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
+		//how many seconds
+		if (timeDiff < 600) {
+			return null;
+		} 
 	
 		List<Connection> connections = getConnections();
 		if (connections.size() == 0 || this.getNrofMessages() == 0) {
@@ -356,110 +368,6 @@ public class E3PRouter extends ActiveRouter {
 		
 	}
 
-
-	private void calculatePrivateMax() {
-		
-		List<Connection> connections = getConnections();
-
-		g = SimClock.getIntTime();
-		
-		// loop for each private sum value
-		for (int j = 0; j < pred_accuracy * 4 + 2; j++) {
-			int h = g +j;
-				
-			if (j == 0) {
-				floodingMessagesToAllConnections(connections, "MAXINIT", 
-						h, 2048);
-				
-			} else if (j == 1) {
-				
-			} else if ((j > 1) && (j < pred_accuracy * 4 + 1)){
-				
-			} else if (j == pred_accuracy * 4 + 1) {
-				
-			} else {
-				
-			}
-			
-			floodingMessagesToAllConnections(connections, "MAXROUND", 
-					h, 2048);
-		}
-		
-		calculatePrivateSum();
-
-	}
-	
-	private void floodingMessagesToAllConnections(List<Connection> connections, 
-			String id_prefix, int instance_id, int resSize) {
-		
-		for (Connection conn : connections) {
-			String id = id_prefix + SimClock.getIntTime() + "-" + 
-					getHost().getAddress();
-			Message initmsg = new Message(getHost(),conn.getOtherNode(getHost()),
-					id, 1024);
-			initmsg.addProperty("type", id_prefix);
-			initmsg.addProperty("leader", getHost());
-			initmsg.addProperty("g", g);
-			if (instance_id != 0) {
-				initmsg.addProperty("h", instance_id);
-			}
-			Random rand = new Random();
-			int random_val = rand.nextInt(10);
-			initmsg.addProperty("random_value", random_val);
-			
-			cal_preds = this.getDeliveryPreds();
-
-			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
-
-				double pOld = getPredFor(e.getKey()); // P(a,c)_old
-				double pNew = pOld - random_val;
-				cal_preds.put(e.getKey(), pNew);
-			}
-			
-			getProcessedPredForFloodingMessage(instance_id - g, connections.size());
-			this.createNewMessage(initmsg);
-			initmsg.setResponseSize(resSize);
-		}
-		
-	}
-	
-	private void getProcessedPredForFloodingMessage(int looptime_j, 
-			int connections_num) {
-		
-		if (looptime_j == 0) {
-			// messages all p_i
-			for (int i = 0; i < connections_num; i++) {
-				 Random rand = new Random();
-				 
-				 Map<DTNHost, Double> Preds =
-							this.getDeliveryPreds();
-
-					for (Map.Entry<DTNHost, Double> e : Preds.entrySet()) {
-
-						double pOld = getPredFor(e.getKey()); // P(a,c)_old
-						double pNew = pOld - rand.nextInt(10);
-						preds.put(e.getKey(), pNew);
-					}
-					
-
-				 this.getDeliveryPreds();
-			}
-	
-		} else if (looptime_j == 1) {
-			
-		} else if ((looptime_j > 1) && (looptime_j < pred_accuracy * 4 + 1)){
-			
-		} else if (looptime_j == pred_accuracy * 4 + 1) {
-			
-		} else {
-			
-		}
-		
-	}
-	
-	private void calculatePrivateSum() {
-		
-	}
 		
 	@Override
 	public Message messageTransferred(String id, DTNHost from) {
