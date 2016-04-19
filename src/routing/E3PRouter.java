@@ -1,5 +1,7 @@
 package routing;
 
+import static core.Constants.DEBUG;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -90,6 +92,7 @@ public class E3PRouter extends ActiveRouter {
 	
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	private static int k_value;
+	private static int encountered_nodes_num = 0;
 
 	private static String community_id;
 
@@ -100,7 +103,10 @@ public class E3PRouter extends ActiveRouter {
 	private Map<DTNHost, Double> pub_preds;
 	
 	/** calculating  predictabilities temporary memory*/
-	private Map<DTNHost, Double> cal_preds, distrib_preds;
+	private Map<DTNHost, Double> cal_preds = null;
+	
+	/** DTN leader Host*/
+	private static DTNHost leaderDTNHost = null;
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -191,10 +197,91 @@ public class E3PRouter extends ActiveRouter {
 					updatePublicPreds();
 				}
 			}
+			
+			if (cal_preds != null) {
+				blurringOrignalProbability(con);
+			}
+			
 		}
 	}
 	
 	
+	private void blurringOrignalProbability(Connection con) {
+		encountered_nodes_num += 1;
+		if (encountered_nodes_num == k_value + 1) {
+			encountered_nodes_num = 0;
+			//send the blurring probability to leader, if getHost() is leader hold, if not send it
+			String id = SimClock.getIntTime() + "-" + 
+					getHost().getAddress();
+			Message res = new Message(this.getHost(),leaderDTNHost,
+					id, 2048);
+			res.addProperty("calculatingPreds", cal_preds);
+			res.setAppID("RESPONSE_DISTRIB_PREDS");
+			this.createNewMessage(res);
+			cal_preds = null;
+			
+		} else {
+			//send the random number to each other and calculate the cal_preds
+			exchangeRandomNumbers(con, 2048);
+			
+		}
+		
+	}
+	
+	
+	private Connection exchangeRandomNumbers(Connection conn, int resSize) {
+		
+		String id = SimClock.getIntTime() + "-" + 
+				getHost().getAddress();
+		Message randmsg = new Message(getHost(),conn.getOtherNode(getHost()),
+				id, 1024);
+		randmsg.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
+		
+		// Generate and then set the random number
+		Random rand = new Random();
+		int random_val = rand.nextInt(10);
+		randmsg.addProperty("random_value", random_val);
+		randmsg.setResponseSize(resSize);
+
+
+
+		//send the message to the other sides
+		
+		if (startTransfer(randmsg, conn) != RCV_OK) {
+			return null;
+		}
+		
+		return conn;
+		
+	}
+	
+
+
+	@Override
+	protected void transferDone(Connection con) { 
+		
+		Message m = con.getMessage();
+
+		if (m == null) {
+			if (DEBUG) core.Debug.p("Null message for con " + con);
+			return;
+		}
+		
+		for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+
+			double pOld = getPredFor(e.getKey()); // P(a,c)_old
+			int randval = (int)m.getProperty("random_value");
+			double pNew = pOld - randval;
+			cal_preds.put(e.getKey(), pNew);
+		}
+		
+		/* was the message delivered to the final recipient? */
+		if (m.getTo() == con.getOtherNode(getHost())) {
+			this.deleteMessage(m.getId(), false);
+		}
+		
+	}
+
 	
 	/**
 	 * Updates public predictions for a community.
@@ -209,6 +296,7 @@ public class E3PRouter extends ActiveRouter {
 			initiateE3PR();
 		}
 		
+		//this should be move to the compeletion of the public preds update
 		this.lastAgeUpdate = SimClock.getTime();
 		
 	}
@@ -249,17 +337,17 @@ public class E3PRouter extends ActiveRouter {
 	
 	private Message encapsulateInitSignal() {
 		/* Prepare the parameters for initiating signal */
-		String l = getHost().toString();
+		DTNHost dtnhost = getHost();
 		g = SimClock.getIntTime();
 		// Get the groupID of the community 
-		String[] hostname= l.split(String.valueOf
+		String[] hostname= dtnhost.toString().split(String.valueOf
 				(getHost().getAddress()));
 		community_id = hostname[0];
 		
 		Message initmsg = new Message(getHost(),getHost(),
-				l + g, 1024);
+				dtnhost.toString() + g, 1024);
 		initmsg.setAppID("INIT_SIGNAL");
-		initmsg.addProperty("hostname", l);
+		initmsg.addProperty("leaderDTNHost", dtnhost);
 		initmsg.addProperty("maxInstanceID", g);
 		initmsg.addProperty("communityID", community_id);
 		initmsg.addProperty("sumInstanceID", j + g);
@@ -382,13 +470,20 @@ public class E3PRouter extends ActiveRouter {
 		 */
 		
 		if (m.getAppID().equals("INIT_SIGNAL")) {
-			int j = (int)m.getProperty("sumInstanceID") - (int)m.getProperty("maxInstanceID");
+			int j = (int)m.getProperty("sumInstanceID") 
+					- (int)m.getProperty("maxInstanceID");
 			// assignment the value p_i
 			if (j == 0) {
 				cal_preds = this.getDeliveryPreds();
-				distrib_preds = cal_preds;
 			} else if ((j > 0) && (j < pred_accuracy + 1)){
 				cal_preds = this.getDeliveryPreds();
+				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+
+					double pOld = getPredFor(e.getKey()); // P(a,c)_old
+					double pNew = Math.floor((pOld * Math.pow(2, j))) 
+							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+					cal_preds.put(e.getKey(), pNew);
+				}
 
 			} else if (j == pred_accuracy + 1) {
 				cal_preds = this.getDeliveryPreds();
@@ -398,37 +493,30 @@ public class E3PRouter extends ActiveRouter {
 				return null;
 			}
 			
-			blurringOrignalProbability();
+			leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
 
+		}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
+
+		/* if the message is the RANDOM_NUMBER_EXCHANGE_SIGNAL message */
+			
+			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+
+				double pOld = getPredFor(e.getKey());
+				int randval = (int)m.getProperty("random_value");
+				double pNew = pOld + randval;
+				cal_preds.put(e.getKey(), pNew);
+			}
+			this.deleteMessage(m.getId(), false);
+		}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS")) {
+			//ADD THE rou
+			
+			//if is quanji, then flood the result to all nodes in the same community
+			
+			
+			
 		}
 		return m;
 	}
-	
-	private void blurringOrignalProbability() {
-		
-		
-		//when encounter k nodes, send the random number and receive the random number 
-		
-		//according k to transmit the random number
-		// next time when nodes encounter, they exchange their random numbers
-		
-		Random rand = new Random();
-		int random_val = rand.nextInt(10);
-		
-		for (Map.Entry<DTNHost, Double> e : distrib_preds.entrySet()) {
-
-			double pOld = getPredFor(e.getKey()); // P(a,c)_old
-			double pNew = pOld - random_val;
-			cal_preds.put(e.getKey(), pNew);
-		}
-		
-		
-		//send the blurring probability to leader, if getHost() is leader hold, if not send it
-		
-		
-		
-	}
-
 
 
 	/**
