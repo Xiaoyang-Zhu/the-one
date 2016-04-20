@@ -7,8 +7,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import routing.util.RoutingInfo;
 import util.Tuple;
@@ -107,16 +109,27 @@ public class E3PRouter extends ActiveRouter {
 	private Map<DTNHost, Double> preds;
 	
 	/** public delivery predictabilities */
+	private Map<DTNHost, Double> r_intermediate_preds, r_init, r_final = null;
+	
+	/** public delivery predictabilities */
 	private Map<DTNHost, Double> pub_preds;
 	
 	/** calculating  predictabilities temporary memory*/
 	private Map<DTNHost, Double> cal_preds = null;
+	
+	/** temp sotrage for distributed value from other nodes */
+	private Map<DTNHost, Double> tmp_preds = null;
+
 	
 	/** DTN leader Host*/
 	private DTNHost leaderDTNHost = null;
 	
 	/** Integer */
 	private static Map<String, Integer> communities_attrib;
+	
+	/** Number of distributed response to the leader */
+	private Set <DTNHost> num_distrib_response;
+
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -211,7 +224,7 @@ public class E3PRouter extends ActiveRouter {
 		this.preds = new HashMap<DTNHost, Double>();
 		
 		/**Initiate the public delivery predictabilities */
-		this.pub_preds =new HashMap<DTNHost, Double>();
+//		this.r_intermediate_preds =new HashMap<DTNHost, Double>();
 	}
 
 	@Override
@@ -248,7 +261,11 @@ public class E3PRouter extends ActiveRouter {
 			res.addProperty("calculatingPreds", cal_preds);
 			res.setAppID("RESPONSE_DISTRIB_PREDS");
 			this.createNewMessage(res);
+			if (isleader) {
+				r_intermediate_preds = cal_preds;
+			}
 			cal_preds = null;
+
 			
 		} else {
 			//send the random number to each other and calculate the cal_preds
@@ -449,12 +466,46 @@ public class E3PRouter extends ActiveRouter {
 			this.deleteMessage(m.getId(), false);
 			
 		}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
-			//ADD THE rou
-			//DTNHost[] = m.getFrom();
-			//the number of nodes in the community
-			communities_attrib.get(community_id);
-			//if is quanji, then flood the result to all nodes in the same community
+			//Add to the public preds and add the new destinations and add the preds
+			num_distrib_response = new HashSet<DTNHost>();
+			num_distrib_response.add(m.getFrom());
+			tmp_preds = (Map<DTNHost, Double>)m.getProperty("calculatingPreds");
+			for (Map.Entry<DTNHost, Double> e : tmp_preds.entrySet()) {
+				if (r_intermediate_preds.containsKey(e.getKey())) {
+					r_intermediate_preds.replace(e.getKey(), r_intermediate_preds.get(e.getKey()) + e.getValue());
+				} else {
+					r_intermediate_preds.put(e.getKey(), e.getValue());
+				}
+			}
 			
+			/* if all distrib values are gathered, then flood the result to all nodes 
+			in the same community carrying the kill message */
+			if (num_distrib_response.size() == communities_attrib.get(community_id)) {
+				String msgid = SimClock.getIntTime() + "-" + 
+						getHost().getAddress();
+				Message res = new Message(this.getHost(), getHost(),
+						msgid, 1024);
+				res.addProperty("intermediatePreds", r_intermediate_preds);
+				res.setAppID("RESPONSE_SUM_PREDS");
+				res.addProperty("j_value", j);
+				this.createNewMessage(res);
+			}
+			
+		}  else if (m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+			r_intermediate_preds = (Map<DTNHost, Double>)m.getProperty("intermediatePreds");
+			if (m.getProperty("j_value").equals(0)) {
+				r_init = r_intermediate_preds;
+			} else if (m.getProperty("j_value").equals(pred_accuracy +1)) {
+				r_final = r_intermediate_preds;
+			}
+			
+			if (r_final != null) {
+				for (Map.Entry<DTNHost, Double> e : r_final.entrySet()) {
+					assert r_init.containsKey(e.getKey()) != false : "r_init and r_final not match!";
+					r_init.replace(e.getKey(), r_init.get(e.getKey()) - e.getValue());
+					pub_preds = r_init;
+				}
+			}
 		}
 		return m;
 	}
