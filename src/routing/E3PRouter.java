@@ -48,8 +48,8 @@ public class E3PRouter extends ActiveRouter {
 	 * delivery predictions. Should be tweaked for the scenario.*/
 	public static final String SECONDS_IN_UNIT_S ="secondsInTimeUnit";
 	
-	/** Leaders' ID predefined in configuration file */
-	public static final String	LEADERS_ID = "leadersID";
+	/** COMMUNITIES_ATTRIBUTES: communityID and the number of nodes in each community */
+	public static final String	COMMUNITIES_ATTRIBUTES = "communitiesAttributes";
 	
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	public static final String	K_VALUE = "kValue";
@@ -92,6 +92,10 @@ public class E3PRouter extends ActiveRouter {
 	
 	/** Leaders' ID predefined in configuration file */
 	private static String[]	leaders_id;
+	/** Communities attributes string */
+	private static String[]	communities_attributes_str;
+	/** Communities attributes */
+	private static String[]	communities_attributes;
 	
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	private static int k_value;
@@ -110,6 +114,9 @@ public class E3PRouter extends ActiveRouter {
 	
 	/** DTN leader Host*/
 	private DTNHost leaderDTNHost = null;
+	
+	/** Integer */
+	private static Map<String, Integer> communities_attrib;
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
@@ -155,10 +162,17 @@ public class E3PRouter extends ActiveRouter {
 		}
 		
 		/* Designate leaders of each community */
-		if (s.contains(LEADERS_ID)){
-			leaders_id = s.getSetting(LEADERS_ID).split(",");
+		if (s.contains(COMMUNITIES_ATTRIBUTES)){
+			int leaderNO = 0;
+			communities_attrib = new HashMap<String, Integer>();
+			communities_attributes_str = s.getSetting(COMMUNITIES_ATTRIBUTES).split(",");
+			for (int i = 0; i < communities_attributes_str.length; i++) {
+				communities_attributes = communities_attributes_str[i].split(":");
+				communities_attrib.put(communities_attributes[0], E3PSettings.getInt(communities_attributes[1]));
+				leaders_id[i] = communities_attributes[0] + leaderNO;
+				leaderNO += E3PSettings.getInt(communities_attributes[1]);
+			}
 		}
-
 		initPreds();
 	}
 
@@ -209,7 +223,7 @@ public class E3PRouter extends ActiveRouter {
 			updateDeliveryPredFor(otherHost);
 			updateTransitivePreds(otherHost);
 			
-			//If the node is leader, then try to updatePublicPreds
+			//If the node is leader, then try to initiate the protocol
 			if (isleader) {
 				initiateE3PR();
 			}
@@ -258,14 +272,14 @@ public class E3PRouter extends ActiveRouter {
 		randmsg.addProperty("random_value", random_val);
 		randmsg.setResponseSize(resSize);
 
-
+		this.createNewMessage(randmsg);
 
 		//send the message to the other sides
 		
-		if (startTransfer(randmsg, conn) != RCV_OK) {
+/*		if (startTransfer(randmsg, conn) != RCV_OK) {
 			return null;
 		}
-		
+*/		
 		return conn;
 		
 	}
@@ -312,15 +326,17 @@ public class E3PRouter extends ActiveRouter {
 	 * Initiates 3PR to flood the message carrying the initiating the 
 	 * 3PR signal
 	 */
-	private Connection initiateE3PR() {
+	private boolean initiateE3PR() {
 		
 		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
 		//how many seconds
 		if (timeDiff < 600) {
-			return null;
+			return false;
 		} 
-	
-		List<Connection> connections = getConnections();
+		
+		return this.createNewMessage(encapsulateInitSignal());
+
+/*		List<Connection> connections = getConnections();
 		if (connections.size() == 0 || this.getNrofMessages() == 0) {
 			return null;
 		}
@@ -344,7 +360,7 @@ public class E3PRouter extends ActiveRouter {
 
 		}
 		return null;
-		
+*/		
 	}
 	
 	private Message encapsulateInitSignal() {
@@ -383,7 +399,9 @@ public class E3PRouter extends ActiveRouter {
 			// assignment the value p_i
 			if (j == 0) {
 				cal_preds = this.getDeliveryPreds();
-			} else if ((j > 0) && (j < pred_accuracy + 1)){
+			} else if (j == 1) {
+
+			} else if ((j > 2) && (j < pred_accuracy + 1)) {
 				cal_preds = this.getDeliveryPreds();
 				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
 
@@ -414,13 +432,28 @@ public class E3PRouter extends ActiveRouter {
 				double pNew = pOld + randval;
 				cal_preds.put(e.getKey(), pNew);
 			}
+			if (m.getResponseSize() != 0) {
+				Message res = new Message(this.getHost(),m.getFrom(),
+						RESPONSE_PREFIX+m.getId(), m.getResponseSize());
+				
+				res.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
+				
+				// Generate and then set the random number
+				Random rand = new Random();
+				int random_val = rand.nextInt(10);
+				res.addProperty("random_value", random_val);
+				this.createNewMessage(res);
+			}
+			
+			
 			this.deleteMessage(m.getId(), false);
-		}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS")) {
+			
+		}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
 			//ADD THE rou
-			
+			//DTNHost[] = m.getFrom();
+			//the number of nodes in the community
+			communities_attrib.get(community_id);
 			//if is quanji, then flood the result to all nodes in the same community
-			
-			
 			
 		}
 		return m;
