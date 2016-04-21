@@ -85,11 +85,13 @@ public class E3PRouter extends ActiveRouter {
 	/** identifier 3PR instance */
 	private int g = 0;
 	/** indicator of maximum value - default value is true */
-	private boolean ismax = false;
+	private boolean ismax = true;
 	/** variant to control the number of loops in leader nodes */
 	private int j = 0;
 	/** Leader indicator */
 	private boolean isleader = false;
+	/** Leader has protocol instance */
+	private boolean leaderhasinstance = false;
 
 	
 	/** Leaders' ID predefined in configuration file */
@@ -114,11 +116,17 @@ public class E3PRouter extends ActiveRouter {
 	/** public delivery predictabilities */
 	private Map<DTNHost, Double> pub_preds;
 	
-	/** calculating  predictabilities temporary memory*/
+	/** calculating  predictabilities temporary memory */
 	private Map<DTNHost, Double> cal_preds = null;
+	
+	/** Recording the ismax indicator */
+	private Map<DTNHost, Double> ismax_preds = null;
 	
 	/** temp sotrage for distributed value from other nodes */
 	private Map<DTNHost, Double> tmp_preds = null;
+	
+	/** ismax indicator for the DP */
+	private Map<DTNHost, Boolean> ismax_matrix;
 
 	
 	/** DTN leader Host*/
@@ -200,6 +208,7 @@ public class E3PRouter extends ActiveRouter {
 		this.destination_num = r.destination_num;
 		this.pred_accuracy = r.pred_accuracy;
 		this.isleader = r.isleader;
+		this.leaderhasinstance = r.leaderhasinstance;
 		this.g = r.g;
 		this.j = r.j;
 		this.ismax = r.ismax;
@@ -225,6 +234,8 @@ public class E3PRouter extends ActiveRouter {
 		
 		/**Initiate the public delivery predictabilities */
 //		this.r_intermediate_preds =new HashMap<DTNHost, Double>();
+		this.ismax_matrix = new HashMap<DTNHost, Boolean>();
+
 	}
 
 	@Override
@@ -327,16 +338,6 @@ public class E3PRouter extends ActiveRouter {
 		}
 		
 	}
-
-	
-	/**
-	 * Updates public predictions for a community.
-	 */
-	private void updatePublicPreds() {
-		
-
-		
-	}
 	
 	
 	/**
@@ -347,9 +348,11 @@ public class E3PRouter extends ActiveRouter {
 		
 		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
 		//how many seconds
-		if (timeDiff < 600) {
+		if (timeDiff < 600 || leaderhasinstance) {
 			return false;
 		} 
+		
+		leaderhasinstance = true;
 		
 		return this.createNewMessage(encapsulateInitSignal());
 
@@ -417,20 +420,46 @@ public class E3PRouter extends ActiveRouter {
 			if (j == 0) {
 				cal_preds = this.getDeliveryPreds();
 			} else if (j == 1) {
-
-			} else if ((j > 2) && (j < pred_accuracy + 1)) {
 				cal_preds = this.getDeliveryPreds();
 				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
 
 					double pOld = getPredFor(e.getKey()); // P(a,c)_old
 					double pNew = Math.floor((pOld * Math.pow(2, j))) 
 							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-					cal_preds.put(e.getKey(), pNew);
+					cal_preds.replace(e.getKey(), pNew);
+					// Initiating the ismax_matrix
+					ismax_matrix.put(e.getKey(), true);
+					ismax_preds = cal_preds;
+				}
+
+			} else if ((j > 1) && (j < pred_accuracy + 1)) {
+				cal_preds = this.getDeliveryPreds();
+				for (Map.Entry<DTNHost, Double> e : r_intermediate_preds.entrySet()) {
+					double pOld = ismax_preds.get(e.getKey()); // P(a,c)_old
+					double pNew = Math.floor((pOld * Math.pow(2, j))) 
+							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+					if (e.getValue() != 0 && pNew == 0 && ismax_matrix.get(e.getKey())) {
+						ismax_matrix.replace(e.getKey(), false);
+						ismax_preds.replace(e.getKey(), (double) 0);
+					} 
+				}
+				
+				for (Map.Entry<DTNHost, Double> e : ismax_preds.entrySet()) {
+
+					double pOld = getPredFor(e.getKey()); // P(a,c)_old
+					double pNew = Math.floor((pOld * Math.pow(2, j))) 
+							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+					cal_preds.replace(e.getKey(), pNew);
 				}
 
 			} else if (j == pred_accuracy + 1) {
 				cal_preds = this.getDeliveryPreds();
 				// if ismax = true set 0
+				for (Map.Entry<DTNHost, Boolean> e : ismax_matrix.entrySet()) {
+					if (e.getValue() == true) {
+						cal_preds.replace(e.getKey(), (double) 0);
+					}
+				}
 				
 			} else {
 				return null;
@@ -504,6 +533,11 @@ public class E3PRouter extends ActiveRouter {
 					assert r_init.containsKey(e.getKey()) != false : "r_init and r_final not match!";
 					r_init.replace(e.getKey(), r_init.get(e.getKey()) - e.getValue());
 					pub_preds = r_init;
+					//signal messages purge
+					if (isleader) {
+						this.lastAgeUpdate = SimClock.getTime();
+						leaderhasinstance = false;
+					}
 				}
 			}
 		}
@@ -592,8 +626,6 @@ public class E3PRouter extends ActiveRouter {
 		for (Map.Entry<DTNHost, Double> e : preds.entrySet()) {
 			e.setValue(e.getValue()*mult);
 		}
-
-		this.lastAgeUpdate = SimClock.getTime();
 	}
 
 	/**
