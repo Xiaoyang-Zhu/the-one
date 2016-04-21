@@ -36,7 +36,7 @@ public class E3PRouter extends ActiveRouter {
 	/** the number of destination node default value */
 	public static final int DEFAULT_DESTINATION_NUM = 4;
 	/** the number of destination node default value */
-	public static final int DEFAULT_PRED_ACCURACY = 4;
+	public static final int DEFAULT_PRED_ACCURACY = 6;
 	/** delivery predictability aging constant */
 	public static final double GAMMA = 0.98;
 	/** k constant value */
@@ -141,6 +141,9 @@ public class E3PRouter extends ActiveRouter {
 
 	/** last delivery predictability update (sim)time */
 	private double lastAgeUpdate;
+	
+	/** last delivery predictability update (sim)time */
+	private double publastAgeUpdate = 0;
 
 	/**
 	 * Constructor. Creates a new message router based on the settings in
@@ -215,6 +218,7 @@ public class E3PRouter extends ActiveRouter {
 		this.encountered_nodes_num = r.encountered_nodes_num;
 		this.community_id = r.community_id;
 		this.leaderDTNHost = r.leaderDTNHost;
+		this.publastAgeUpdate = r.publastAgeUpdate;
 		//If the node is the leader of the community
 		for (String s: leaders_id) {
 			if (r.getHost().toString().startsWith(s)) {
@@ -346,7 +350,7 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private boolean initiateE3PR() {
 		
-		double timeDiff = (SimClock.getTime() - this.lastAgeUpdate);
+		double timeDiff = (SimClock.getTime() - this.publastAgeUpdate);
 		//how many seconds
 		if (timeDiff < 600 || leaderhasinstance) {
 			return false;
@@ -535,7 +539,7 @@ public class E3PRouter extends ActiveRouter {
 					pub_preds = r_init;
 					//signal messages purge
 					if (isleader) {
-						this.lastAgeUpdate = SimClock.getTime();
+						this.publastAgeUpdate = SimClock.getTime();
 						leaderhasinstance = false;
 					}
 				}
