@@ -92,10 +92,12 @@ public class E3PRouter extends ActiveRouter {
 	private boolean isleader = false;
 	/** Leader has protocol instance */
 	private boolean leaderhasinstance = false;
+	/** Indicate if the blurring function need run */
+	private boolean isblurring = false;
 
 	
 	/** Leaders' ID predefined in configuration file */
-	private static String[]	leaders_id;
+	private static String[]	leaders_id = new String[]{};
 	/** Communities attributes string */
 	private static String[]	communities_attributes_str;
 	/** Communities attributes */
@@ -117,7 +119,7 @@ public class E3PRouter extends ActiveRouter {
 	private Map<DTNHost, Double> pub_preds;
 	
 	/** calculating  predictabilities temporary memory */
-	private Map<DTNHost, Double> cal_preds = null;
+	private Map<DTNHost, Double> cal_preds;
 	
 	/** Recording the ismax indicator */
 	private Map<DTNHost, Double> ismax_preds = null;
@@ -235,7 +237,8 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private void initPreds() {
 		this.preds = new HashMap<DTNHost, Double>();
-		
+		this.cal_preds = new HashMap<DTNHost, Double>();
+
 		/**Initiate the public delivery predictabilities */
 //		this.r_intermediate_preds =new HashMap<DTNHost, Double>();
 		this.ismax_matrix = new HashMap<DTNHost, Boolean>();
@@ -256,7 +259,7 @@ public class E3PRouter extends ActiveRouter {
 				initiateE3PR();
 			}
 			
-			if (cal_preds != null) {
+			if (isblurring) {
 				blurringOrignalProbability(con);
 			}
 			
@@ -279,6 +282,7 @@ public class E3PRouter extends ActiveRouter {
 			if (isleader) {
 				r_intermediate_preds = cal_preds;
 			}
+			isblurring = false;
 			cal_preds = null;
 
 			
@@ -416,135 +420,138 @@ public class E3PRouter extends ActiveRouter {
 		/* check if msg is initiating signal message, then according to j
 		 * to provide different p_i to calculate the value
 		 */
-		
-		if (m.getAppID().equals("INIT_SIGNAL")) {
-			int j = (int)m.getProperty("sumInstanceID") 
-					- (int)m.getProperty("maxInstanceID");
-			// assignment the value p_i
-			if (j == 0) {
-				cal_preds = this.getDeliveryPreds();
-			} else if (j == 1) {
-				cal_preds = this.getDeliveryPreds();
-				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+		if (m.getAppID() != null) {
+			
+			if (m.getAppID().equals("INIT_SIGNAL")) {
+				int j = (int)m.getProperty("sumInstanceID") 
+						- (int)m.getProperty("maxInstanceID");
+				// assignment the value p_i
+				if (j == 0) {
+					cal_preds = this.getDeliveryPreds();
+				} else if (j == 1) {
+					cal_preds = this.getDeliveryPreds();
+					for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
 
-					double pOld = getPredFor(e.getKey()); // P(a,c)_old
-					double pNew = Math.floor((pOld * Math.pow(2, j))) 
-							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-					cal_preds.replace(e.getKey(), pNew);
-					// Initiating the ismax_matrix
-					ismax_matrix.put(e.getKey(), true);
-					ismax_preds = cal_preds;
-				}
+						double pOld = getPredFor(e.getKey()); // P(a,c)_old
+						double pNew = Math.floor((pOld * Math.pow(2, j))) 
+								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+						cal_preds.replace(e.getKey(), pNew);
+						// Initiating the ismax_matrix
+						ismax_matrix.put(e.getKey(), true);
+						ismax_preds = cal_preds;
+					}
 
-			} else if ((j > 1) && (j < pred_accuracy + 1)) {
-				cal_preds = this.getDeliveryPreds();
-				for (Map.Entry<DTNHost, Double> e : r_intermediate_preds.entrySet()) {
-					double pOld = ismax_preds.get(e.getKey()); // P(a,c)_old
-					double pNew = Math.floor((pOld * Math.pow(2, j))) 
-							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-					if (e.getValue() != 0 && pNew == 0 && ismax_matrix.get(e.getKey())) {
-						ismax_matrix.replace(e.getKey(), false);
-						ismax_preds.replace(e.getKey(), (double) 0);
-					} 
+				} else if ((j > 1) && (j < pred_accuracy + 1)) {
+					cal_preds = this.getDeliveryPreds();
+					for (Map.Entry<DTNHost, Double> e : r_intermediate_preds.entrySet()) {
+						double pOld = ismax_preds.get(e.getKey()); // P(a,c)_old
+						double pNew = Math.floor((pOld * Math.pow(2, j))) 
+								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+						if (e.getValue() != 0 && pNew == 0 && ismax_matrix.get(e.getKey())) {
+							ismax_matrix.replace(e.getKey(), false);
+							ismax_preds.replace(e.getKey(), (double) 0);
+						} 
+					}
+					
+					for (Map.Entry<DTNHost, Double> e : ismax_preds.entrySet()) {
+
+						double pOld = getPredFor(e.getKey()); // P(a,c)_old
+						double pNew = Math.floor((pOld * Math.pow(2, j))) 
+								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
+						cal_preds.replace(e.getKey(), pNew);
+					}
+
+				} else if (j == pred_accuracy + 1) {
+					cal_preds = this.getDeliveryPreds();
+					// if ismax = true set 0
+					for (Map.Entry<DTNHost, Boolean> e : ismax_matrix.entrySet()) {
+						if (e.getValue() == true) {
+							cal_preds.replace(e.getKey(), (double) 0);
+						}
+					}
+					
+				} else {
+					return null;
 				}
 				
-				for (Map.Entry<DTNHost, Double> e : ismax_preds.entrySet()) {
+				leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
 
-					double pOld = getPredFor(e.getKey()); // P(a,c)_old
-					double pNew = Math.floor((pOld * Math.pow(2, j))) 
-							- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-					cal_preds.replace(e.getKey(), pNew);
+			}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
+
+			/* if the message is the RANDOM_NUMBER_EXCHANGE_SIGNAL message */
+				isblurring = true;
+				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+
+					double pOld = getPredFor(e.getKey());
+					int randval = (int)m.getProperty("random_value");
+					double pNew = pOld + randval;
+					cal_preds.put(e.getKey(), pNew);
 				}
-
-			} else if (j == pred_accuracy + 1) {
-				cal_preds = this.getDeliveryPreds();
-				// if ismax = true set 0
-				for (Map.Entry<DTNHost, Boolean> e : ismax_matrix.entrySet()) {
-					if (e.getValue() == true) {
-						cal_preds.replace(e.getKey(), (double) 0);
+				if (m.getResponseSize() != 0) {
+					Message res = new Message(this.getHost(),m.getFrom(),
+							RESPONSE_PREFIX+m.getId(), m.getResponseSize());
+					
+					res.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
+					
+					// Generate and then set the random number
+					Random rand = new Random();
+					int random_val = rand.nextInt(10);
+					res.addProperty("random_value", random_val);
+					this.createNewMessage(res);
+				}
+				
+				
+				this.deleteMessage(m.getId(), false);
+				
+			}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
+				//Add to the public preds and add the new destinations and add the preds
+				num_distrib_response = new HashSet<DTNHost>();
+				num_distrib_response.add(m.getFrom());
+				tmp_preds = (Map<DTNHost, Double>)m.getProperty("calculatingPreds");
+				for (Map.Entry<DTNHost, Double> e : tmp_preds.entrySet()) {
+					if (r_intermediate_preds.containsKey(e.getKey())) {
+						r_intermediate_preds.replace(e.getKey(), r_intermediate_preds.get(e.getKey()) + e.getValue());
+					} else {
+						r_intermediate_preds.put(e.getKey(), e.getValue());
 					}
 				}
 				
-			} else {
-				return null;
-			}
-			
-			leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
-
-		}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
-
-		/* if the message is the RANDOM_NUMBER_EXCHANGE_SIGNAL message */
-			
-			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
-
-				double pOld = getPredFor(e.getKey());
-				int randval = (int)m.getProperty("random_value");
-				double pNew = pOld + randval;
-				cal_preds.put(e.getKey(), pNew);
-			}
-			if (m.getResponseSize() != 0) {
-				Message res = new Message(this.getHost(),m.getFrom(),
-						RESPONSE_PREFIX+m.getId(), m.getResponseSize());
-				
-				res.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
-				
-				// Generate and then set the random number
-				Random rand = new Random();
-				int random_val = rand.nextInt(10);
-				res.addProperty("random_value", random_val);
-				this.createNewMessage(res);
-			}
-			
-			
-			this.deleteMessage(m.getId(), false);
-			
-		}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
-			//Add to the public preds and add the new destinations and add the preds
-			num_distrib_response = new HashSet<DTNHost>();
-			num_distrib_response.add(m.getFrom());
-			tmp_preds = (Map<DTNHost, Double>)m.getProperty("calculatingPreds");
-			for (Map.Entry<DTNHost, Double> e : tmp_preds.entrySet()) {
-				if (r_intermediate_preds.containsKey(e.getKey())) {
-					r_intermediate_preds.replace(e.getKey(), r_intermediate_preds.get(e.getKey()) + e.getValue());
-				} else {
-					r_intermediate_preds.put(e.getKey(), e.getValue());
+				/* if all distrib values are gathered, then flood the result to all nodes 
+				in the same community carrying the kill message */
+				if (num_distrib_response.size() == communities_attrib.get(community_id)) {
+					String msgid = SimClock.getIntTime() + "-" + 
+							getHost().getAddress();
+					Message res = new Message(this.getHost(), getHost(),
+							msgid, 1024);
+					res.addProperty("intermediatePreds", r_intermediate_preds);
+					res.setAppID("RESPONSE_SUM_PREDS");
+					res.addProperty("j_value", j);
+					this.createNewMessage(res);
 				}
-			}
-			
-			/* if all distrib values are gathered, then flood the result to all nodes 
-			in the same community carrying the kill message */
-			if (num_distrib_response.size() == communities_attrib.get(community_id)) {
-				String msgid = SimClock.getIntTime() + "-" + 
-						getHost().getAddress();
-				Message res = new Message(this.getHost(), getHost(),
-						msgid, 1024);
-				res.addProperty("intermediatePreds", r_intermediate_preds);
-				res.setAppID("RESPONSE_SUM_PREDS");
-				res.addProperty("j_value", j);
-				this.createNewMessage(res);
-			}
-			
-		}  else if (m.getAppID().equals("RESPONSE_SUM_PREDS")) {
-			r_intermediate_preds = (Map<DTNHost, Double>)m.getProperty("intermediatePreds");
-			if (m.getProperty("j_value").equals(0)) {
-				r_init = r_intermediate_preds;
-			} else if (m.getProperty("j_value").equals(pred_accuracy +1)) {
-				r_final = r_intermediate_preds;
-			}
-			
-			if (r_final != null) {
-				for (Map.Entry<DTNHost, Double> e : r_final.entrySet()) {
-					assert r_init.containsKey(e.getKey()) != false : "r_init and r_final not match!";
-					r_init.replace(e.getKey(), r_init.get(e.getKey()) - e.getValue());
-					pub_preds = r_init;
-					//signal messages purge
-					if (isleader) {
-						this.publastAgeUpdate = SimClock.getTime();
-						leaderhasinstance = false;
+				
+			}  else if (m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+				r_intermediate_preds = (Map<DTNHost, Double>)m.getProperty("intermediatePreds");
+				if (m.getProperty("j_value").equals(0)) {
+					r_init = r_intermediate_preds;
+				} else if (m.getProperty("j_value").equals(pred_accuracy +1)) {
+					r_final = r_intermediate_preds;
+				}
+				
+				if (r_final != null) {
+					for (Map.Entry<DTNHost, Double> e : r_final.entrySet()) {
+						assert r_init.containsKey(e.getKey()) != false : "r_init and r_final not match!";
+						r_init.replace(e.getKey(), r_init.get(e.getKey()) - e.getValue());
+						pub_preds = r_init;
+						//signal messages purge
+						if (isleader) {
+							this.publastAgeUpdate = SimClock.getTime();
+							leaderhasinstance = false;
+						}
 					}
 				}
 			}
 		}
+
 		return m;
 	}
 
@@ -746,10 +753,10 @@ public class E3PRouter extends ActiveRouter {
 			new ArrayList<Tuple<Message, Connection>>();
 		for (Message m : getMessageCollection()) {
 			
-			if (m.getAppID().equals("INIT_SIGNAL") || 
+			if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
 					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
-					m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
 				for (Connection con : getConnections()) {
 					//whether the nodes are in the same community
@@ -812,10 +819,10 @@ public class E3PRouter extends ActiveRouter {
 			new ArrayList<Message>(this.getMessageCollection());
 		for (Message m : temp) {
 			
-			if (m.getAppID().equals("INIT_SIGNAL") || 
+			if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
 					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
-					m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
 				if (con.getOtherNode(getHost()).toString().contains(community_id)) {
 					if (other == m.getTo()) {
@@ -901,10 +908,10 @@ public class E3PRouter extends ActiveRouter {
 			}
 
 			for (Message m : msgCollection) {
-				if (m.getAppID().equals("INIT_SIGNAL") || 
+				if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
 						m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 						m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
-						m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+						m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 					
 					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
 						

@@ -54,8 +54,8 @@ Scenario.nrofHostGroups = 4
 # Common settings for all groups
 Group.movementModel = CommunityBasedMovement
 #Group.movementModel = MapBasedMovement
-Group.router = ProphetRouter
-#Group.router = E3PRouter
+#Group.router = ProphetRouter
+Group.router = E3PRouter
 
 Group.bufferSize = 5M
 Group.waitTime = 0, 120
@@ -123,7 +123,7 @@ MapBasedMovement.mapFile1 = data/map.osm.wkt
 ## Reports - all report names have to be valid report classes
 
 # how many reports to load
-Report.nrofReports = 2
+Report.nrofReports = 3
 # length of the warm up period (simulated seconds)
 Report.warmup = 0
 # default directory of reports (can be overridden per Report with output setting)
@@ -131,6 +131,12 @@ Report.reportDir = reports/
 # Report classes to load
 Report.report1 = ContactTimesReport
 Report.report2 = ConnectivityONEReport
+Report.report3 = DeliveredMessagesReport
+#Delivery ratio:  time  created  delivered  delivered/created
+Report.report4 = MessageDeliveryReport
+#Delivered messages' delays
+Report.report5 = MessageDelayReport
+
 
 ## Default settings for some routers settings
 ProphetRouter.secondsInTimeUnit = 30
