@@ -746,32 +746,53 @@ public class E3PRouter extends ActiveRouter {
 			new ArrayList<Tuple<Message, Connection>>();
 		for (Message m : getMessageCollection()) {
 			
-			/* Get the message originated from this node and encapsulate it */
-			
-			EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
-			Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
-			if( m.getProperty("destinations_list") == null){
-				msg = encap_msg.msg_replicate_encap(m);
+			if (m.getAppID().equals("INIT_SIGNAL") || 
+					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
+					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
+					m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+				
+				for (Connection con : getConnections()) {
+					//whether the nodes are in the same community
+					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+						DTNHost to = con.getOtherNode(getHost());
+						if (m.getTo() == to) {
+							forTuples.add(new Tuple<Message, Connection>(m,con));
+						}
+					}
+					
+				}
 			} else {
-				msg = m.replicate();
+				
+				/* Get the message originated from this node and encapsulate it */
+				
+				EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+				Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+				if( m.getProperty("destinations_list") == null){
+					msg = encap_msg.msg_replicate_encap(m);
+				} else {
+					msg = m.replicate();
+				}
+				
+				for (Connection con : getConnections()) {
+					DTNHost to = con.getOtherNode(getHost());
+					
+					/*
+					 * Obtain the list of destination to match the connected node 
+					 * If there is one node who is one destination node in the
+					 * list, the message will be picked up
+					 */
+					
+					@SuppressWarnings("unchecked")
+					List <DTNHost> dtnhost_destinations_list 
+						= (List <DTNHost>) msg.getProperty("destinations_list");
+					if (dtnhost_destinations_list.contains(to)) {
+						forTuples.add(new Tuple<Message, Connection>(encap_msg.setTo(msg, to),con));
+					}
+				}
+				
 			}
 			
-			for (Connection con : getConnections()) {
-				DTNHost to = con.getOtherNode(getHost());
 				
-				/*
-				 * Obtain the list of destination to match the connected node 
-				 * If there is one node who is one destination node in the
-				 * list, the message will be picked up
-				 */
-				
-				@SuppressWarnings("unchecked")
-				List <DTNHost> dtnhost_destinations_list 
-					= (List <DTNHost>) msg.getProperty("destinations_list");
-				if (dtnhost_destinations_list.equals(to)) {
-					forTuples.add(new Tuple<Message, Connection>(encap_msg.setTo(msg, to),con));
-				}
-			}	
 
 		}
 
@@ -791,23 +812,41 @@ public class E3PRouter extends ActiveRouter {
 			new ArrayList<Message>(this.getMessageCollection());
 		for (Message m : temp) {
 			
-			EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
-			Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
-			
-			if( m.getProperty("destinations_list") == null){
-				msg = encap_msg.msg_replicate_encap(m);
-			} else {
-				msg = m.replicate();
-			}
-			
-			@SuppressWarnings("unchecked")
-			List <DTNHost> dtnhost_destinations_list 
-				= (List <DTNHost>) msg.getProperty("destinations_list");
-			if (dtnhost_destinations_list.equals(other)) {
-				if (startTransfer(encap_msg.setTo(msg, other), con) == RCV_OK) {
-					return true;
+			if (m.getAppID().equals("INIT_SIGNAL") || 
+					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
+					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
+					m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+				
+				if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+					if (other == m.getTo()) {
+						if (startTransfer(m, con) == RCV_OK) {
+							return true;
+						}
+					}
 				}
+				
+			} else {
+				
+				EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+				Message msg = new Message(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+				
+				if( m.getProperty("destinations_list") == null){
+					msg = encap_msg.msg_replicate_encap(m);
+				} else {
+					msg = m.replicate();
+				}
+				
+				@SuppressWarnings("unchecked")
+				List <DTNHost> dtnhost_destinations_list 
+					= (List <DTNHost>) msg.getProperty("destinations_list");
+				if (dtnhost_destinations_list.contains(other)) {
+					if (startTransfer(encap_msg.setTo(msg, other), con) == RCV_OK) {
+						return true;
+					}
+				}
+				
 			}
+			
 		}
 		return false;
 	}
@@ -862,12 +901,27 @@ public class E3PRouter extends ActiveRouter {
 			}
 
 			for (Message m : msgCollection) {
-				if (othRouter.hasMessage(m.getId())) {
-					continue; // skip messages that the other one has
-				}
-				if (othRouter.getPredFor(m.getTo()) > getPredFor(m.getTo())) {
-					// the other node has higher probability of delivery
-					messages.add(new Tuple<Message, Connection>(m,con));
+				if (m.getAppID().equals("INIT_SIGNAL") || 
+						m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
+						m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
+						m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+					
+					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+						
+						if (othRouter.hasMessage(m.getId())) {
+							continue; // skip messages that the other one has
+						}
+						messages.add(new Tuple<Message, Connection>(m,con));
+					}
+					
+				} else {
+					if (othRouter.hasMessage(m.getId())) {
+						continue; // skip messages that the other one has
+					}
+					if (othRouter.getPredFor(m.getTo()) > getPredFor(m.getTo())) {
+						// the other node has higher probability of delivery
+						messages.add(new Tuple<Message, Connection>(m,con));
+					}
 				}
 			}
 		}
