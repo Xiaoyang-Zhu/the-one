@@ -16,6 +16,7 @@ import routing.util.RoutingInfo;
 import util.Tuple;
 import core.Connection;
 import core.DTNHost;
+import core.Debug;
 import core.Message;
 import core.Settings;
 import core.SimClock;
@@ -33,26 +34,33 @@ public class E3PRouter extends ActiveRouter {
 	public static final double P_INIT = 0.75;
 	/** delivery predictability transitivity scaling constant default value */
 	public static final double DEFAULT_BETA = 0.25;
+	/** delivery predictability aging constant */
+	public static final double GAMMA = 0.98;
+
 	/** the number of destination node default value */
 	public static final int DEFAULT_DESTINATION_NUM = 4;
 	/** the number of destination node default value */
 	public static final int DEFAULT_PRED_ACCURACY = 6;
-	/** delivery predictability aging constant */
-	public static final double GAMMA = 0.98;
 	/** k constant value */
 	public static final int DEFAULT_K_VALUE = 2;
+	/** Debug Switch */
+	public static final boolean DEBUG = true;
+	public static final int debugLevel = 0;
 	
 	/** E3P router's setting namespace ({@value})*/
 	public static final String E3P_NS = "E3PRouter";
+
+
 	/**
 	 * Number of seconds in time unit -setting id ({@value}).
 	 * How many seconds one time unit is when calculating aging of
 	 * delivery predictions. Should be tweaked for the scenario.*/
 	public static final String SECONDS_IN_UNIT_S ="secondsInTimeUnit";
 	
-	/** COMMUNITIES_ATTRIBUTES: communityID and the number of nodes in each community */
+	/** 
+	 * COMMUNITIES_ATTRIBUTES: communityID and the number of nodes 
+	 * in each community */
 	public static final String	COMMUNITIES_ATTRIBUTES = "communitiesAttributes";
-	
 	/** K value which is a constant such that 2 <= k < n, where n = |C|" */
 	public static final String	K_VALUE = "kValue";
 
@@ -97,7 +105,7 @@ public class E3PRouter extends ActiveRouter {
 
 	
 	/** Leaders' ID predefined in configuration file */
-	private static String[]	leaders_id = new String[]{};
+	private static String[]	leaders_id;
 	/** Communities attributes string */
 	private static String[]	communities_attributes_str;
 	/** Communities attributes */
@@ -129,6 +137,12 @@ public class E3PRouter extends ActiveRouter {
 	
 	/** ismax indicator for the DP */
 	private Map<DTNHost, Boolean> ismax_matrix;
+	
+	/** Leaders' list to set the destination of INIT_SIGNAL
+	 *  and SUM_RESPONSE_SUM_PREDS
+	 */
+	private static Map <String, DTNHost> leadersList =
+			new HashMap<String, DTNHost>();
 
 	
 	/** DTN leader Host*/
@@ -140,11 +154,10 @@ public class E3PRouter extends ActiveRouter {
 	/** Number of distributed response to the leader */
 	private Set <DTNHost> num_distrib_response;
 
-
-	/** last delivery predictability update (sim)time */
+	/** last delivery predictability update (sim)time for private DP */
 	private double lastAgeUpdate;
 	
-	/** last delivery predictability update (sim)time */
+	/** last delivery predictability update (sim)time for public DP */
 	private double publastAgeUpdate = 0;
 
 	/**
@@ -188,18 +201,22 @@ public class E3PRouter extends ActiveRouter {
 		}
 		
 		/* Designate leaders of each community */
-		if (s.contains(COMMUNITIES_ATTRIBUTES)){
+		if (E3PSettings.contains(COMMUNITIES_ATTRIBUTES)){
 			int leaderNO = 0;
 			communities_attrib = new HashMap<String, Integer>();
-			communities_attributes_str = s.getSetting(COMMUNITIES_ATTRIBUTES).split(",");
+			communities_attributes_str = E3PSettings.getSetting
+					(COMMUNITIES_ATTRIBUTES).split(",");
+			leaders_id = new String[communities_attributes_str.length];
 			for (int i = 0; i < communities_attributes_str.length; i++) {
 				communities_attributes = communities_attributes_str[i].split(":");
-				communities_attrib.put(communities_attributes[0], E3PSettings.getInt(communities_attributes[1]));
+				communities_attrib.put(communities_attributes[0], Integer.parseInt
+						(communities_attributes[1]));
 				leaders_id[i] = communities_attributes[0] + leaderNO;
-				leaderNO += E3PSettings.getInt(communities_attributes[1]);
+				leaderNO += Integer.parseInt(communities_attributes[1]);
 			}
 		}
 		initPreds();
+		if (DEBUG) Debug.p("Loading configuration file compelete!", debugLevel);
 	}
 
 	/**
@@ -221,12 +238,6 @@ public class E3PRouter extends ActiveRouter {
 		this.community_id = r.community_id;
 		this.leaderDTNHost = r.leaderDTNHost;
 		this.publastAgeUpdate = r.publastAgeUpdate;
-		//If the node is the leader of the community
-		for (String s: leaders_id) {
-			if (r.getHost().toString().startsWith(s)) {
-				this.isleader = true;
-			}
-		}
 		
 		initPreds();
 
@@ -237,12 +248,10 @@ public class E3PRouter extends ActiveRouter {
 	 */
 	private void initPreds() {
 		this.preds = new HashMap<DTNHost, Double>();
+		
+		/* Initiate ismax indicator and calculating dp room */
 		this.cal_preds = new HashMap<DTNHost, Double>();
-
-		/**Initiate the public delivery predictabilities */
-//		this.r_intermediate_preds =new HashMap<DTNHost, Double>();
 		this.ismax_matrix = new HashMap<DTNHost, Boolean>();
-
 	}
 
 	@Override
@@ -254,6 +263,22 @@ public class E3PRouter extends ActiveRouter {
 			updateDeliveryPredFor(otherHost);
 			updateTransitivePreds(otherHost);
 			
+			/* 
+			 * If the node is the leader of the community, set the indicator.
+			 * This step should be done in every DTNHost initiating step. But 
+			 * the replicate function didn't pass the DTNHost instance to the 
+			 * router. So it could not be done at the beginning of the initiating 
+			 * process.
+			 */
+			if (isleader == false && getHost() != null) {
+				for (String s: leaders_id) {
+					if (getHost().toString().startsWith(s)) {
+						this.isleader = true;
+						leadersList.put(s, getHost());
+					}
+				}
+			}
+			
 			//If the node is leader, then try to initiate the protocol
 			if (isleader) {
 				initiateE3PR();
@@ -262,7 +287,6 @@ public class E3PRouter extends ActiveRouter {
 			if (isblurring) {
 				blurringOrignalProbability(con);
 			}
-			
 		}
 	}
 	
@@ -271,7 +295,9 @@ public class E3PRouter extends ActiveRouter {
 		encountered_nodes_num += 1;
 		if (encountered_nodes_num == k_value + 1) {
 			encountered_nodes_num = 0;
-			//send the blurring probability to leader, if getHost() is leader hold, if not send it
+			/* send the blurring probability to leader, if getHost() is 
+			 * leader hold it, if not send it
+			 */
 			String id = SimClock.getIntTime() + "-" + 
 					getHost().getAddress();
 			Message res = new Message(this.getHost(),leaderDTNHost,
@@ -284,8 +310,6 @@ public class E3PRouter extends ActiveRouter {
 			}
 			isblurring = false;
 			cal_preds = null;
-
-			
 		} else {
 			//send the random number to each other and calculate the cal_preds
 			exchangeRandomNumbers(con, 2048);
@@ -308,19 +332,10 @@ public class E3PRouter extends ActiveRouter {
 		randmsg.addProperty("random_value", random_val);
 		randmsg.setResponseSize(resSize);
 
-		this.createNewMessage(randmsg);
-
-		//send the message to the other sides
-		
-/*		if (startTransfer(randmsg, conn) != RCV_OK) {
-			return null;
-		}
-*/		
+		this.createNewMessage(randmsg);	
 		return conn;
-		
 	}
 	
-
 
 	@Override
 	protected void transferDone(Connection con) { 
@@ -360,35 +375,10 @@ public class E3PRouter extends ActiveRouter {
 			return false;
 		} 
 		
+		if (DEBUG) Debug.p("Initiating the E3PR protocol", debugLevel);
 		leaderhasinstance = true;
 		
-		return this.createNewMessage(encapsulateInitSignal());
-
-/*		List<Connection> connections = getConnections();
-		if (connections.size() == 0 || this.getNrofMessages() == 0) {
-			return null;
-		}
-		
-		List<Message> messages = new ArrayList<Message>();
-		
-		//Encapsulate the signal message and add to the message list
-		messages.add(encapsulateInitSignal());
-		this.sortByQueueMode(messages);
-			
-		for (int i=0, n=connections.size(); i<n; i++) {
-			Connection con = connections.get(i);
-			
-			assert community_id != null : "No community ID!";
-			if (!(con.getOtherNode(getHost()).toString().startsWith(community_id))) {
-				Message started = tryAllMessages(con, messages);
-				if (started != null) {
-					return con;
-				}
-			}
-
-		}
-		return null;
-*/		
+		return this.createNewMessage(encapsulateInitSignal());		
 	}
 	
 	private Message encapsulateInitSignal() {
@@ -400,8 +390,21 @@ public class E3PRouter extends ActiveRouter {
 				(getHost().getAddress()));
 		community_id = hostname[0];
 		
-		Message initmsg = new Message(getHost(),getHost(),
+		/* Looking for the unreachable destination for REESPONSE_SUM_PREDS */
+		DTNHost unreachable = null;
+		for (Map.Entry<String, DTNHost> e : leadersList.entrySet()) {
+			if (e.getKey() == community_id) {
+				continue;
+			} else {
+				unreachable = e.getValue();
+				break;
+			}
+		}
+		
+		assert  unreachable != null : "Can not get the SIGNAL destination!";
+		Message initmsg = new Message(getHost(), unreachable,
 				dtnhost.toString() + g, 1024);
+		
 		initmsg.setAppID("INIT_SIGNAL");
 		initmsg.addProperty("leaderDTNHost", dtnhost);
 		initmsg.addProperty("maxInstanceID", g);
@@ -474,7 +477,9 @@ public class E3PRouter extends ActiveRouter {
 					return null;
 				}
 				
-				leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
+				if (leaderDTNHost == null) {
+					leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
+				}
 
 			}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
 
@@ -521,7 +526,19 @@ public class E3PRouter extends ActiveRouter {
 				if (num_distrib_response.size() == communities_attrib.get(community_id)) {
 					String msgid = SimClock.getIntTime() + "-" + 
 							getHost().getAddress();
-					Message res = new Message(this.getHost(), getHost(),
+					/* Looking for the unreachable destination for REESPONSE_SUM_PREDS */
+					DTNHost unreachable = null;
+
+					for (Map.Entry<String, DTNHost> e : leadersList.entrySet()) {
+						if (e.getKey() == community_id) {
+							continue;
+						} else {
+							unreachable = e.getValue();
+							break;
+						}
+					}
+					
+					Message res = new Message(this.getHost(), unreachable,
 							msgid, 1024);
 					res.addProperty("intermediatePreds", r_intermediate_preds);
 					res.setAppID("RESPONSE_SUM_PREDS");
@@ -762,7 +779,11 @@ public class E3PRouter extends ActiveRouter {
 					//whether the nodes are in the same community
 					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
 						DTNHost to = con.getOtherNode(getHost());
+						E3PRouter othRouter = (E3PRouter)to.getRouter();
 						if (m.getTo() == to) {
+							if (othRouter.hasMessage(m.getId())) {
+								continue; // skip messages that the other one has
+							}
 							forTuples.add(new Tuple<Message, Connection>(m,con));
 						}
 					}
@@ -824,14 +845,27 @@ public class E3PRouter extends ActiveRouter {
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
 					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
-				if (con.getOtherNode(getHost()).toString().contains(community_id)) {
-					if (other == m.getTo()) {
-						if (startTransfer(m, con) == RCV_OK) {
+				if (m.getAppID().equals("INIT_SIGNAL") || 
+						m.getAppID().equals("RESPONSE_SUM_PREDS")) {
+//					EncapMsg tmpmsg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
+//					Message sigmsg = tmpmsg.setTo(m, con.getOtherNode(getHost()));
+					Message tmpmsg = new Message(m.getFrom(), con.getOtherNode(getHost()), 
+							m.getId(), m.getSize());
+					Message sigmsg = tmpmsg.replicate();
+					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+						if (startTransfer(sigmsg, con) == RCV_OK) {
 							return true;
 						}
 					}
+				} else {
+					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+						if (other == m.getTo()) {
+							if (startTransfer(m, con) == RCV_OK) {
+								return true;
+							}
+						}
+					}
 				}
-				
 			} else {
 				
 				EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
@@ -998,6 +1032,24 @@ public class E3PRouter extends ActiveRouter {
 	public MessageRouter replicate() {
 		E3PRouter r = new E3PRouter(this);
 		return r;
+	}
+	
+	@Override
+	protected Tuple<Message, Connection> tryMessagesForConnected(
+			List<Tuple<Message, Connection>> tuples) {
+		if (tuples.size() == 0) {
+			return null;
+		}
+
+		for (Tuple<Message, Connection> t : tuples) {
+			Message m = t.getKey();
+			Connection con = t.getValue();
+			if (startTransfer(m, con) == RCV_OK) {
+				return t;
+			}
+		}
+
+		return null;
 	}
 
 }
