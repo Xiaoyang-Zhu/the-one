@@ -93,7 +93,7 @@ Events1.class = MessageEventGenerator
 # Creation interval in seconds (one new message every 25 to 35 seconds)
 Events1.interval = 25,35
 # Message sizes (500kB - 1MB)
-Events1.size = 500k,1M
+Events1.size = 4k,5k
 # range of message source/destination addresses
 Events1.hosts = 0,36
 # Message ID prefix

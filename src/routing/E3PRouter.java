@@ -279,6 +279,15 @@ public class E3PRouter extends ActiveRouter {
 				}
 			}
 			
+			// Get the groupID of the community 
+			if (community_id == null) {
+				DTNHost dtnhost = getHost();
+				String[] hostname= dtnhost.toString().split(String.valueOf
+						(getHost().getAddress()));
+				community_id = hostname[0];
+			}
+			
+			
 			//If the node is leader, then try to initiate the protocol
 			if (isleader) {
 				initiateE3PR();
@@ -343,22 +352,26 @@ public class E3PRouter extends ActiveRouter {
 		Message m = con.getMessage();
 
 		if (m == null) {
-			if (DEBUG) core.Debug.p("Null message for con " + con);
+			if (DEBUG) Debug.p("Null message for con " + con);
 			return;
 		}
 		
-		for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
+		if (m.getAppID() != null && m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
+			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
 
-			double pOld = getPredFor(e.getKey()); // P(a,c)_old
-			int randval = (int)m.getProperty("random_value");
-			double pNew = pOld - randval;
-			cal_preds.put(e.getKey(), pNew);
+				double pOld = getPredFor(e.getKey()); // P(a,c)_old
+				int randval = (int)m.getProperty("random_value");
+				double pNew = pOld - randval;
+				cal_preds.put(e.getKey(), pNew);
+			}
+			
+			/* was the message delivered to the final recipient? */
+			if (m.getTo() == con.getOtherNode(getHost())) {
+				this.deleteMessage(m.getId(), false);
+			}
+			if (DEBUG) Debug.p("K exchange trasmission!", debugLevel);
 		}
 		
-		/* was the message delivered to the final recipient? */
-		if (m.getTo() == con.getOtherNode(getHost())) {
-			this.deleteMessage(m.getId(), false);
-		}
 		
 	}
 	
@@ -375,7 +388,7 @@ public class E3PRouter extends ActiveRouter {
 			return false;
 		} 
 		
-		if (DEBUG) Debug.p("Initiating the E3PR protocol", debugLevel);
+		if (DEBUG) Debug.p(getHost() + ": " + "Initiating the E3PR protocol", debugLevel);
 		leaderhasinstance = true;
 		
 		return this.createNewMessage(encapsulateInitSignal());		
@@ -385,10 +398,6 @@ public class E3PRouter extends ActiveRouter {
 		/* Prepare the parameters for initiating signal */
 		DTNHost dtnhost = getHost();
 		g = SimClock.getIntTime();
-		// Get the groupID of the community 
-		String[] hostname= dtnhost.toString().split(String.valueOf
-				(getHost().getAddress()));
-		community_id = hostname[0];
 		
 		/* Looking for the unreachable destination for REESPONSE_SUM_PREDS */
 		DTNHost unreachable = null;
@@ -845,27 +854,14 @@ public class E3PRouter extends ActiveRouter {
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
 					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
-				if (m.getAppID().equals("INIT_SIGNAL") || 
-						m.getAppID().equals("RESPONSE_SUM_PREDS")) {
-//					EncapMsg tmpmsg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
-//					Message sigmsg = tmpmsg.setTo(m, con.getOtherNode(getHost()));
-					Message tmpmsg = new Message(m.getFrom(), con.getOtherNode(getHost()), 
-							m.getId(), m.getSize());
-					Message sigmsg = tmpmsg.replicate();
-					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
-						if (startTransfer(sigmsg, con) == RCV_OK) {
+				if (con.getOtherNode(getHost()).toString().contains(community_id)) {
+					if (other == m.getTo()) {
+						if (startTransfer(m, con) == RCV_OK) {
 							return true;
 						}
 					}
-				} else {
-					if (con.getOtherNode(getHost()).toString().contains(community_id)) {
-						if (other == m.getTo()) {
-							if (startTransfer(m, con) == RCV_OK) {
-								return true;
-							}
-						}
-					}
 				}
+				
 			} else {
 				
 				EncapMsg encap_msg = new EncapMsg(m.getFrom(), m.getTo(), m.getId(), m.getSize());
