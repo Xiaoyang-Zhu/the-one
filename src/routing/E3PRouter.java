@@ -1,7 +1,5 @@
 package routing;
 
-import static core.Constants.DEBUG;
-
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -389,6 +387,7 @@ public class E3PRouter extends ActiveRouter {
 		} 
 		
 		if (DEBUG) Debug.p(getHost() + ": " + "Initiating the E3PR protocol", debugLevel);
+		
 		leaderhasinstance = true;
 		
 		return this.createNewMessage(encapsulateInitSignal());		
@@ -437,6 +436,9 @@ public class E3PRouter extends ActiveRouter {
 			if (m.getAppID().equals("INIT_SIGNAL")) {
 				int j = (int)m.getProperty("sumInstanceID") 
 						- (int)m.getProperty("maxInstanceID");
+				
+//				if (DEBUG) Debug.p("INIT_SIGNAL message received!", debugLevel);
+
 				// assignment the value p_i
 				if (j == 0) {
 					cal_preds = this.getDeliveryPreds();
@@ -663,6 +665,7 @@ public class E3PRouter extends ActiveRouter {
 		for (Map.Entry<DTNHost, Double> e : preds.entrySet()) {
 			e.setValue(e.getValue()*mult);
 		}
+		this.lastAgeUpdate = SimClock.getTime();
 	}
 
 	/**
