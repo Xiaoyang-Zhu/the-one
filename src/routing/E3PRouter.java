@@ -514,8 +514,6 @@ public class E3PRouter extends ActiveRouter {
 					cal_preds.put(e.getKey(), pNew);
 				}
 				
-				this.deleteMessage(m.getId(), false);
-				
 			}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
 				//Add to the public preds and add the new destinations and add the preds
 				num_distrib_response = new HashSet<DTNHost>();
