@@ -291,98 +291,8 @@ public class E3PRouter extends ActiveRouter {
 				initiateE3PR();
 			}
 			
-			// If blurring is true, the same community, has the INIT_SIGNAL
-			if (isblurring && con.getOtherNode(getHost()).toString().contains(community_id)) {
-				
-				for (Message m : getMessageCollection()) {
-					if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL"))) {
-						E3PRouter othRouter = (E3PRouter) con.getOtherNode(getHost()).getRouter();
-						if (othRouter.hasMessage(m.getId())) {
-							blurringOrignalProbability(con);
-						}
-					}
-				}
-				
-			}
-			
 		}
 	}
-	
-	
-	private void blurringOrignalProbability(Connection con) {
-		encountered_nodes_num += 1;
-		if (encountered_nodes_num == k_value + 1) {
-			encountered_nodes_num = 0;
-			/* send the blurring probability to leader, if getHost() is 
-			 * leader hold it, if not send it
-			 */
-			String id = SimClock.getIntTime() + "-" + 
-					getHost().getAddress();
-			Message res = new Message(this.getHost(),leaderDTNHost,
-					id, 2048);
-			res.addProperty("calculatingPreds", cal_preds);
-			res.setAppID("RESPONSE_DISTRIB_PREDS");
-			this.createNewMessage(res);
-			if (isleader) {
-				r_intermediate_preds = cal_preds;
-			}
-			isblurring = false;
-			cal_preds = null;
-		} else {
-			//send the random number to each other and calculate the cal_preds
-			exchangeRandomNumbers(con);
-		}
-		
-	}
-	
-	
-	private Connection exchangeRandomNumbers(Connection conn) {
-		
-		String id = SimClock.getIntTime() + "-" + 
-				getHost().getAddress();
-		Message randmsg = new Message(getHost(),conn.getOtherNode(getHost()),
-				id, 1024);
-		randmsg.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
-		
-		// Generate and then set the random number
-		Random rand = new Random();
-		int random_val = rand.nextInt(10);
-		randmsg.addProperty("random_value", random_val);
-
-		this.createNewMessage(randmsg);	
-		return conn;
-	}
-	
-
-	@Override
-	protected void transferDone(Connection con) { 
-		
-		Message m = con.getMessage();
-
-		if (m == null) {
-			if (DEBUG) Debug.p("Null message for con " + con);
-			return;
-		}
-		
-		if (m.getAppID() != null && m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
-			for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
-
-				double pOld = getPredFor(e.getKey()); // P(a,c)_old
-				int randval = (int)m.getProperty("random_value");
-				double pNew = pOld - randval;
-				cal_preds.put(e.getKey(), pNew);
-			}
-			
-			/* was the message delivered to the final recipient? */
-			if (m.getTo() == con.getOtherNode(getHost())) {
-				this.deleteMessage(m.getId(), false);
-			}
-			if (DEBUG) Debug.p("K exchange trasmission!", debugLevel);
-		}
-		
-		
-	}
-	
 	
 	/**
 	 * Initiates 3PR to flood the message carrying the initiating the 
@@ -434,6 +344,7 @@ public class E3PRouter extends ActiveRouter {
 	}
 
 		
+	@SuppressWarnings("unchecked")
 	@Override
 	public Message messageTransferred(String id, DTNHost from) {
 		Message m = super.messageTransferred(id, from);
@@ -444,92 +355,38 @@ public class E3PRouter extends ActiveRouter {
 		if (m.getAppID() != null) {
 			
 			if (m.getAppID().equals("INIT_SIGNAL")) {
-				int j = (int)m.getProperty("sumInstanceID") 
-						- (int)m.getProperty("maxInstanceID");
+				String msgid = SimClock.getIntTime() + "-" + 
+						getHost().getAddress();
+				Message res = new Message(this.getHost(), m.getFrom(),
+						msgid, 1024);
+				res.addProperty("preds", this.preds);
+				res.setAppID("RESPONSE_DISTRIB_PREDS");
+				this.createNewMessage(res);
 				
-//				if (DEBUG) Debug.p("INIT_SIGNAL message received!", debugLevel);
-
-				// assignment the value p_i
-				if (j == 0) {
-					cal_preds = this.getDeliveryPreds();
-				} else if (j == 1) {
-					cal_preds = this.getDeliveryPreds();
-					for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
-
-						double pOld = getPredFor(e.getKey()); // P(a,c)_old
-						double pNew = Math.floor((pOld * Math.pow(2, j))) 
-								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-						cal_preds.replace(e.getKey(), pNew);
-						// Initiating the ismax_matrix
-						ismax_matrix.put(e.getKey(), true);
-						ismax_preds = cal_preds;
-					}
-
-				} else if ((j > 1) && (j < pred_accuracy + 1)) {
-					cal_preds = this.getDeliveryPreds();
-					for (Map.Entry<DTNHost, Double> e : r_intermediate_preds.entrySet()) {
-						double pOld = ismax_preds.get(e.getKey()); // P(a,c)_old
-						double pNew = Math.floor((pOld * Math.pow(2, j))) 
-								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-						if (e.getValue() != 0 && pNew == 0 && ismax_matrix.get(e.getKey())) {
-							ismax_matrix.replace(e.getKey(), false);
-							ismax_preds.replace(e.getKey(), (double) 0);
-						} 
-					}
-					
-					for (Map.Entry<DTNHost, Double> e : ismax_preds.entrySet()) {
-
-						double pOld = getPredFor(e.getKey()); // P(a,c)_old
-						double pNew = Math.floor((pOld * Math.pow(2, j))) 
-								- 2 * Math.floor((pOld * Math.pow(2, j-1)));
-						cal_preds.replace(e.getKey(), pNew);
-					}
-
-				} else if (j == pred_accuracy + 1) {
-					cal_preds = this.getDeliveryPreds();
-					// if ismax = true set 0
-					for (Map.Entry<DTNHost, Boolean> e : ismax_matrix.entrySet()) {
-						if (e.getValue() == true) {
-							cal_preds.replace(e.getKey(), (double) 0);
-						}
-					}
-					
-				} else {
-					return null;
-				}
+			} else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
+				pub_preds = this.getDeliveryPreds();
+				cal_preds = (Map<DTNHost, Double>) m.getProperty("preds");
 				
-				if (leaderDTNHost == null) {
-					leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
-				}
-				
-				isblurring = true;
-			}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
-
-			/* if the message is the RANDOM_NUMBER_EXCHANGE_SIGNAL message */
 				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
-
-					double pOld = getPredFor(e.getKey());
-					int randval = (int)m.getProperty("random_value");
-					double pNew = pOld + randval;
-					cal_preds.put(e.getKey(), pNew);
+					
+					if (pub_preds.containsKey(e.getKey())) {
+						if (pub_preds.get(e.getKey()) < e.getValue()) {
+							pub_preds.replace(e.getKey(), e.getValue());
+						}
+					} else {
+						pub_preds.put(e.getKey(), e.getValue());
+					}
 				}
 				
-			}  else if (m.getAppID().equals("RESPONSE_DISTRIB_PREDS") && isleader) {
+				
 				//Add to the public preds and add the new destinations and add the preds
 				num_distrib_response = new HashSet<DTNHost>();
 				num_distrib_response.add(m.getFrom());
-				tmp_preds = (Map<DTNHost, Double>)m.getProperty("calculatingPreds");
-				for (Map.Entry<DTNHost, Double> e : tmp_preds.entrySet()) {
-					if (r_intermediate_preds.containsKey(e.getKey())) {
-						r_intermediate_preds.replace(e.getKey(), r_intermediate_preds.get(e.getKey()) + e.getValue());
-					} else {
-						r_intermediate_preds.put(e.getKey(), e.getValue());
-					}
-				}
+
 				
 				/* if all distrib values are gathered, then flood the result to all nodes 
 				in the same community carrying the kill message */
-				if (num_distrib_response.size() == communities_attrib.get(community_id)) {
+				if (num_distrib_response.size() == communities_attrib.get(community_id) - 1) {
 					String msgid = SimClock.getIntTime() + "-" + 
 							getHost().getAddress();
 					/* Looking for the unreachable destination for REESPONSE_SUM_PREDS */
@@ -546,32 +403,14 @@ public class E3PRouter extends ActiveRouter {
 					
 					Message res = new Message(this.getHost(), unreachable,
 							msgid, 1024);
-					res.addProperty("intermediatePreds", r_intermediate_preds);
+					res.addProperty("publicPreds", pub_preds);
 					res.setAppID("RESPONSE_SUM_PREDS");
-					res.addProperty("j_value", j);
+					if (DEBUG) Debug.p("the public preds has been generated!");
 					this.createNewMessage(res);
 				}
-				
-			}  else if (m.getAppID().equals("RESPONSE_SUM_PREDS")) {
-				r_intermediate_preds = (Map<DTNHost, Double>)m.getProperty("intermediatePreds");
-				if (m.getProperty("j_value").equals(0)) {
-					r_init = r_intermediate_preds;
-				} else if (m.getProperty("j_value").equals(pred_accuracy +1)) {
-					r_final = r_intermediate_preds;
-				}
-				
-				if (r_final != null) {
-					for (Map.Entry<DTNHost, Double> e : r_final.entrySet()) {
-						assert r_init.containsKey(e.getKey()) != false : "r_init and r_final not match!";
-						r_init.replace(e.getKey(), r_init.get(e.getKey()) - e.getValue());
-						pub_preds = r_init;
-						//signal messages purge
-						if (isleader) {
-							this.publastAgeUpdate = SimClock.getTime();
-							leaderhasinstance = false;
-						}
-					}
-				}
+			} else if (m.getAppID().equals("RESPONSE_SUM_PREDS") && !(isleader)) {
+				pub_preds = (Map<DTNHost, Double>) m.getProperty("publicPreds");
+				if (DEBUG) Debug.p("Public preds received!", debugLevel);
 			}
 		}
 
@@ -778,7 +617,6 @@ public class E3PRouter extends ActiveRouter {
 		for (Message m : getMessageCollection()) {
 			
 			if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
-					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
 					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
@@ -826,9 +664,6 @@ public class E3PRouter extends ActiveRouter {
 				}
 				
 			}
-			
-				
-
 		}
 
 		return forTuples;
@@ -848,7 +683,6 @@ public class E3PRouter extends ActiveRouter {
 		for (Message m : temp) {
 			
 			if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
-					m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 					m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
 					m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 				
@@ -937,7 +771,6 @@ public class E3PRouter extends ActiveRouter {
 
 			for (Message m : msgCollection) {
 				if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL") || 
-						m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL") || 
 						m.getAppID().equals("RESPONSE_DISTRIB_PREDS") || 
 						m.getAppID().equals("RESPONSE_SUM_PREDS"))) {
 					
@@ -953,7 +786,7 @@ public class E3PRouter extends ActiveRouter {
 					if (othRouter.hasMessage(m.getId())) {
 						continue; // skip messages that the other one has
 					}
-					if (othRouter.getPredFor(m.getTo()) > getPredFor(m.getTo())) {
+					if (othRouter.getPubPredFor(m.getTo()) > getPubPredFor(m.getTo())) {
 						// the other node has higher probability of delivery
 						messages.add(new Tuple<Message, Connection>(m,con));
 					}
@@ -982,11 +815,11 @@ public class E3PRouter extends ActiveRouter {
 				Tuple<Message, Connection> tuple2) {
 			// delivery probability of tuple1's message with tuple1's connection
 			double p1 = ((E3PRouter)tuple1.getValue().
-					getOtherNode(getHost()).getRouter()).getPredFor(
+					getOtherNode(getHost()).getRouter()).getPubPredFor(
 					tuple1.getKey().getTo());
 			// -"- tuple2...
 			double p2 = ((E3PRouter)tuple2.getValue().
-					getOtherNode(getHost()).getRouter()).getPredFor(
+					getOtherNode(getHost()).getRouter()).getPubPredFor(
 					tuple2.getKey().getTo());
 
 			// bigger probability should come first
@@ -1027,23 +860,4 @@ public class E3PRouter extends ActiveRouter {
 		E3PRouter r = new E3PRouter(this);
 		return r;
 	}
-	
-	@Override
-	protected Tuple<Message, Connection> tryMessagesForConnected(
-			List<Tuple<Message, Connection>> tuples) {
-		if (tuples.size() == 0) {
-			return null;
-		}
-
-		for (Tuple<Message, Connection> t : tuples) {
-			Message m = t.getKey();
-			Connection con = t.getValue();
-			if (startTransfer(m, con) == RCV_OK) {
-				return t;
-			}
-		}
-
-		return null;
-	}
-
 }
