@@ -291,9 +291,20 @@ public class E3PRouter extends ActiveRouter {
 				initiateE3PR();
 			}
 			
-			if (isblurring) {
-				blurringOrignalProbability(con);
+			// If blurring is true, the same community, has the INIT_SIGNAL
+			if (isblurring && con.getOtherNode(getHost()).toString().contains(community_id)) {
+				
+				for (Message m : getMessageCollection()) {
+					if (m.getAppID() != null && (m.getAppID().equals("INIT_SIGNAL"))) {
+						E3PRouter othRouter = (E3PRouter) con.getOtherNode(getHost()).getRouter();
+						if (othRouter.hasMessage(m.getId())) {
+							blurringOrignalProbability(con);
+						}
+					}
+				}
+				
 			}
+			
 		}
 	}
 	
@@ -319,13 +330,13 @@ public class E3PRouter extends ActiveRouter {
 			cal_preds = null;
 		} else {
 			//send the random number to each other and calculate the cal_preds
-			exchangeRandomNumbers(con, 2048);
+			exchangeRandomNumbers(con);
 		}
 		
 	}
 	
 	
-	private Connection exchangeRandomNumbers(Connection conn, int resSize) {
+	private Connection exchangeRandomNumbers(Connection conn) {
 		
 		String id = SimClock.getIntTime() + "-" + 
 				getHost().getAddress();
@@ -337,7 +348,6 @@ public class E3PRouter extends ActiveRouter {
 		Random rand = new Random();
 		int random_val = rand.nextInt(10);
 		randmsg.addProperty("random_value", random_val);
-		randmsg.setResponseSize(resSize);
 
 		this.createNewMessage(randmsg);	
 		return conn;
@@ -491,11 +501,11 @@ public class E3PRouter extends ActiveRouter {
 				if (leaderDTNHost == null) {
 					leaderDTNHost = (DTNHost)m.getProperty("leaderDTNHost");
 				}
-
+				
+				isblurring = true;
 			}  else if (m.getAppID().equals("RANDOM_NUMBER_EXCHANGE_SIGNAL")) {
 
 			/* if the message is the RANDOM_NUMBER_EXCHANGE_SIGNAL message */
-				isblurring = true;
 				for (Map.Entry<DTNHost, Double> e : cal_preds.entrySet()) {
 
 					double pOld = getPredFor(e.getKey());
@@ -503,19 +513,6 @@ public class E3PRouter extends ActiveRouter {
 					double pNew = pOld + randval;
 					cal_preds.put(e.getKey(), pNew);
 				}
-				if (m.getResponseSize() != 0) {
-					Message res = new Message(this.getHost(),m.getFrom(),
-							RESPONSE_PREFIX+m.getId(), m.getResponseSize());
-					
-					res.setAppID("RANDOM_NUMBER_EXCHANGE_SIGNAL");
-					
-					// Generate and then set the random number
-					Random rand = new Random();
-					int random_val = rand.nextInt(10);
-					res.addProperty("random_value", random_val);
-					this.createNewMessage(res);
-				}
-				
 				
 				this.deleteMessage(m.getId(), false);
 				

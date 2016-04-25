@@ -112,8 +112,8 @@ MovementModel.warmup = 0
 CommunityBasedMovement.communityNumber = 2,2
 CommunityBasedMovement.mapSize = 2000, 1500
 CommunityBasedMovement.communityID = a,b,c,d
-#CommunityBasedMovement.probabilities_local_roaming = 1,0
-CommunityBasedMovement.probabilities_local_roaming = 0.8,0.2
+CommunityBasedMovement.probabilities_local_roaming = 1,0
+#CommunityBasedMovement.probabilities_local_roaming = 0.8,0.2
 
 ## Map based movement -movement model specific settings
 MapBasedMovement.nrofMapFiles = 1
